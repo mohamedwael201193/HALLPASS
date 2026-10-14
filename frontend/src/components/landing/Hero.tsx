@@ -93,21 +93,26 @@ export default function Hero() {
             intro={!reduceMotion}
             paused={reduceMotion ?? false}
           />
-          <div className="carry-beam-mask absolute inset-x-0 top-0 h-[560px]">
+          <div className="carry-beam-mask absolute inset-x-0 top-0 h-[360px]">
             <Beams
               color="#FFB224"
-              beamWidth={104}
+              beamWidth={80}
               speed={0.4}
-              brightness={1.1}
-              glow={0.5}
-              fillLight={0.25}
-              opacity={0.62}
+              brightness={0.35}
+              glow={0.15}
+              fillLight={0.05}
+              opacity={0.32}
               fade={0.5}
               mouseInteraction={false}
               intro={!reduceMotion}
               paused={reduceMotion ?? false}
             />
           </div>
+          {/* dark scrim behind the headline — keeps text on near-black */}
+          <div
+            aria-hidden
+            className="carry-headline-scrim absolute inset-x-0 top-[60px] h-[560px]"
+          />
         </div>
 
         {/* ---- content: centered, minimal ---- */}

@@ -107,17 +107,29 @@
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* hero beams mask: light beam pours from the top-center, fades out */
+/* hero beams mask: light beam pours from the top-center, fades out well
+   above the headline so the text sits on near-black (2026-10-15) */
 .carry-beam-mask {
   -webkit-mask-image: radial-gradient(
-    ellipse 70% 60% at 50% 0%,
-    black 20%,
-    transparent 78%
+    ellipse 38% 42% at 50% 0%,
+    black 5%,
+    transparent 55%
   );
   mask-image: radial-gradient(
-    ellipse 70% 60% at 50% 0%,
-    black 20%,
-    transparent 78%
+    ellipse 38% 42% at 50% 0%,
+    black 5%,
+    transparent 55%
+  );
+}
+
+/* subtle dark scrim behind the headline — guarantees text contrast,
+   invisible by design (no blur, pure gradient) */
+.carry-headline-scrim {
+  background: radial-gradient(
+    ellipse 58% 42% at 50% 42%,
+    rgba(5, 5, 5, 0.72) 0%,
+    rgba(5, 5, 5, 0.35) 45%,
+    transparent 70%
   );
 }
 
