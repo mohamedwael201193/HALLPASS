@@ -26,8 +26,8 @@ const ConnectScreen = lazy(() =>
 const SessionKeysScreen = lazy(() => import('./pages/app/SessionKeys'))
 /** B2 — (c) Plugin marketplace: install/uninstall via real on-chain userOps. */
 const MarketplaceScreen = lazy(() => import('./pages/app/Marketplace'))
-/** B2 — (d) Policy editor: sliders + live "what this allows" preview. */
-const PolicyEditorScreen = lazy(() => import('./pages/app/PolicyEditor'))
+/** B2 — (d) Policies screen: plain-language enforcement panel + editor. */
+const PoliciesScreen = lazy(() => import('./pages/app/PoliciesScreen'))
 /** B2 — (e) Activity: every spend attempt — allowed (amber) or blocked (why + fix). */
 const ActivityScreen = lazy(() => import('./pages/app/Activity'))
 /** 404 — never a dead end: route the user somewhere useful. */
@@ -49,8 +49,8 @@ export default function App() {
             <Route path="session-keys" element={<SessionKeysScreen />} />
             {/* (c) Plugin marketplace — install/uninstall via real on-chain userOps */}
             <Route path="marketplace" element={<MarketplaceScreen />} />
-            {/* (d) Policy editor — sliders + live "what this allows" preview */}
-            <Route path="policy" element={<PolicyEditorScreen />} />
+            {/* (d) Policies — what the plugin enforces (plain language) + editor */}
+            <Route path="policy" element={<PoliciesScreen />} />
             {/* (e) Activity — every spend attempt: allowed (amber) or blocked (why + fix) */}
             <Route path="activity" element={<ActivityScreen />} />
             <Route path="*" element={<Navigate to="/app" replace />} />

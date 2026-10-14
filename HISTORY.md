@@ -184,3 +184,85 @@ Entries are appended here as build workers complete them. Nothing in this sectio
 
 - **B8 (PLANNED):** relay service contract for `VITE_RELAY_URL` (currently throws `RelayNotConfiguredError`; dashboard self-relays) — or remove the relay path if self-relay stays the design.
 - **B9 (PLANNED):** submission package for the program deadline (2026-10-14 23:59 ET).
+
+---
+
+## DASHBOARD V2 — relay "TAPE" app shell (2026-10-15, worker HALLPASS-DASHBOARD-V2)
+
+Rebuilt `/app` as a premium relay-style shell. Landing hero untouched.
+
+**Shell (`frontend/src/pages/app/AppLayout.tsx` rewritten):**
+- Left sidebar: HALLPASS logo, session-status card (live active-pass count,
+  honest "wallet setup incomplete / not connected" states), icon+label nav
+  (Accounts, Marketplace, Policies, Activity) with the ACTIVE item in amber
+  #FFB224, bottom: "Arc · 5042" network indicator + CONNECT button (disabled
+  with reason when the Reown project ID is not configured).
+- Top bar: current page title, status pill, connect cluster. Mobile 390px:
+  hamburger → nav sheet. Touch targets ≥44px.
+
+**Stats strip (`frontend/src/components/StatsStrip.tsx` + `pages/app/useDashboardStats.ts`):**
+- ACTIVE SESSIONS / TOTAL SPEND CAPS / USDC / EURC (real self-hosted token
+  icons) / REVOKED — every number from Arc mainnet `eth_call`s aggregated
+  across tracked accounts (policies() for session state + caps, ERC-20
+  balanceOf for USDC/EURC). "—" while loading, when the wallet is not
+  connected, or when the plugin address is unconfigured (stated reason).
+  No export buttons (none would be real). Zero is honest (no accounts).
+
+**Session lifecycle (`Accounts.tsx` → `SessionLifecycle`):** each tracked
+account card shows its hall pass from the plugin's on-chain state — status
+(ACTIVE/REVOKED/EXPIRED), per-payment cap, window cap, spent/remaining with
+progress bar, expiry, token coverage (USDC + EURC when in the policy's
+token list) — plus a link to manage the pass. Revoke itself stays on the
+session-keys screen (real tx).
+
+**Policies view (`frontend/src/pages/app/PoliciesScreen.tsx`, route
+`/app/policy`):** "What the plugin enforces" in plain language (spend caps,
+allowed targets, expiry, token coverage) read live from `policies()`,
+above the existing PolicyEditor — whose Save is now WIRED to the real
+`updatePolicy(...)` tx through the account fallback (never wrapped in
+`account.execute`, which reverts on-chain); window/tokens carry over from
+the live policy. Disabled with the exact reason when unwired.
+
+**Empty states:** new `TapeEmptyState` (dashed-line SVG illustration +
+headline + plain explanation + real action) used on Accounts (not
+connected / no accounts), Activity (no account / no rows / no filter
+matches), Policies (no account / no pass). No project ID → the designed
+"Wallet setup incomplete" panel (unchanged).
+
+**Vendored components (founder directive 2026-10-15 — concrete code vendored
+locally, adapted, never hotlinked; manifest in
+`frontend/src/components/vendor/VENDOR.md`):**
+- reactbits Aurora (MIT + Commons Clause) → calm amber WebGL backdrop behind
+  the Accounts header band. Adapted: HALLPASS palette, slow/dim, no mouse
+  interaction, no intro, DPR ≤1.5; dropped upstream `loseContext()` in
+  cleanup (broke React 18 StrictMode dev double-mount — remount reused the
+  lost context and all GL calls became no-ops; verified via
+  `gl.isContextLost()`). Reduced-motion/tab-hidden/off-screen handling kept.
+- pixel-perfect.space CornerTicks (borders/border1 concept) → dashed amber
+  corner registration marks on session cards (the tape frame).
+- Magic UI NumberTicker concept → `CountUp` on framer-motion: stats values
+  count up on first view; target is always the real chain number;
+  precision-safe decimals; reduced-motion renders final immediately.
+- Aceternity UI SpotlightCard concept → pointer-following radial glow on
+  session cards (CSS vars, no blur() filters, hover-only, hidden under
+  reduced-motion).
+- 3dicons.co key-3d.png (CC0 VERIFIED — see
+  `frontend/public/assets/icons-3d/LICENSE-3dicons.md`) → tasteful 3D touch
+  in the "no accounts" empty state.
+- Checked and dropped with reasons: cursify.ui-layouts.com (cursor gimmicks
+  only — banned on dashboard), pixel-perfect GSAP SVG (too heavy),
+  shadcn/ui chrome (hand-built shell already matches tokens; no gain for the
+  weight), Motion Primitives/MicroKit UI (nothing beat CountUp/Spotlight).
+
+**Verification:** `tsc --noEmit` clean; `npm run build` green (prebuild
+selector check passes); Playwright screenshots of every screen
+(`~/workspace/your_files/review-shots/hp-dash-v2-*.png`) in dev and in the
+production build. Production: ZERO uncaught errors (0 pageerrors) — the
+console shows only the intentional loud wallet-down logging (each
+HallpassGate boundary reports the caught WagmiProviderNotFoundError via
+componentDidCatch, by design) plus one sandbox-only Google Fonts load
+failure (proxy-blocked; falls back to system fonts). Wallet-connected
+states (stats values, lifecycle cards, aurora band) verified via a
+temporary component preview route (deleted before commit) — the env has no
+VITE_REOWN_PROJECT_ID so the wallet can never connect here. Real token
+icons featured in stats strip + session cards. Mobile 390px verified.

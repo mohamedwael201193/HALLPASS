@@ -18,19 +18,21 @@ import {
   type Ref,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { isAddress, type Address } from 'viem';
-import { publicClient, formatNativeUsdc, formatEurc, getTokenBalance, EURC_ADDRESS } from '../../lib/contracts';
+import { isAddress, zeroAddress, type Address } from 'viem';
+import { publicClient, formatNativeUsdc, formatEurc, getTokenBalance, EURC_ADDRESS, USDC_ADDRESS } from '../../lib/contracts';
 import TokenIcon from '../../components/TokenIcon';
+import StatsStrip from '../../components/StatsStrip';
+import TapeEmptyState, { TapePrimaryAction } from '../../components/TapeEmptyState';
+import Aurora from '../../components/vendor/reactbits/Aurora';
+import CornerTicks from '../../components/vendor/pixelperfect/CornerTicks';
+import SpotlightCard from '../../components/vendor/aceternity/SpotlightCard';
 import GetEurcPanel from '../../components/GetEurcPanel';
 import type { UseHallpass } from '../../lib/useHallpass';
 import {
   ApiError,
   CopyButton,
-  EmptyState,
   HallpassGate,
-  IconPlug,
   IconShield,
-  IconWallet,
   SectionError,
   Skeleton,
   WalletDownState,
@@ -211,6 +213,265 @@ function PluginList({ account }: { account: Address }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Hall-pass lifecycle — on-chain policy per account (the tape)        */
+/* ------------------------------------------------------------------ */
+
+type LifecycleState =
+  | { status: 'loading' }
+  | { status: 'unavailable'; reason: string }
+  | { status: 'none' }
+  | { status: 'error'; error: string }
+  | {
+      status: 'ready';
+      sessionKey: Address;
+      revoked: boolean;
+      expired: boolean;
+      perTxCapWei: bigint;
+      windowCapWei: bigint;
+      windowSecs: bigint;
+      windowSpent: bigint;
+      expiry: bigint;
+      tokens: Address[];
+    };
+
+function tokenLabel(t: Address): string {
+  if (t.toLowerCase() === USDC_ADDRESS.toLowerCase()) return 'USDC';
+  if (t.toLowerCase() === EURC_ADDRESS.toLowerCase()) return 'EURC';
+  return truncateAddress(t);
+}
+
+function fmtWindow(secs: bigint): string {
+  const s = Number(secs);
+  if (!s || s <= 0) return 'window';
+  if (s % 86400 === 0) {
+    const d = s / 86400;
+    return `per ${d === 1 ? 'day' : `${d} days`}`;
+  }
+  if (s % 3600 === 0) {
+    const h = s / 3600;
+    return `per ${h === 1 ? 'hour' : `${h} hours`}`;
+  }
+  if (s % 60 === 0) {
+    const m = s / 60;
+    return `per ${m === 1 ? 'minute' : `${m} minutes`}`;
+  }
+  return `per ${s} seconds`;
+}
+
+function SessionLifecycle({
+  account,
+  hp,
+}: {
+  account: Address;
+  hp: UseHallpass;
+}) {
+  const [state, setState] = useState<LifecycleState>({ status: 'loading' });
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    if (hp.pluginConfigError) {
+      setState({ status: 'unavailable', reason: hp.pluginConfigError });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: 'loading' });
+    hp
+      .getPolicy(account)
+      .then((p) => {
+        if (cancelled) return;
+        if (p.sessionKey.toLowerCase() === zeroAddress) {
+          setState({ status: 'none' });
+          return;
+        }
+        const now = BigInt(Math.floor(Date.now() / 1000));
+        setState({
+          status: 'ready',
+          sessionKey: p.sessionKey,
+          revoked: p.revoked,
+          expired: p.expiry > 0n && p.expiry <= now,
+          perTxCapWei: p.perTxCapWei,
+          windowCapWei: p.windowCapWei,
+          windowSecs: p.windowSecs,
+          windowSpent: p.windowSpent,
+          expiry: p.expiry,
+          tokens: p.tokens,
+        });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ status: 'error', error: plainError(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account, hp, nonce]);
+
+  if (state.status === 'loading') {
+    return (
+      <div aria-label="Loading hall pass">
+        <Skeleton className="h-[92px]" />
+      </div>
+    );
+  }
+
+  if (state.status === 'unavailable') {
+    return (
+      <p className="rounded-xl border border-dashed border-text/20 p-4 text-sm leading-relaxed text-text/55">
+        Hall-pass reads are unavailable: {state.reason}
+      </p>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <SectionError
+        message="Couldn't read this account's hall pass from the chain."
+        cause={state.error}
+        onRetry={() => setNonce((n) => n + 1)}
+      />
+    );
+  }
+
+  if (state.status === 'none') {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-text/20 p-4">
+        <p className="text-sm text-text/65">
+          No hall pass installed on this account — the plugin holds no session
+          key for it.
+        </p>
+        <Link
+          to="/app/marketplace"
+          className="inline-flex min-h-[44px] items-center rounded-full bg-amber px-5 font-display text-sm font-bold text-ink"
+        >
+          Install one
+        </Link>
+      </div>
+    );
+  }
+
+  const remaining =
+    state.windowCapWei > state.windowSpent
+      ? state.windowCapWei - state.windowSpent
+      : 0n;
+  const spentPct =
+    state.windowCapWei === 0n
+      ? 0
+      : Math.min(
+          100,
+          Math.max(0, Number((state.windowSpent * 100n) / state.windowCapWei)),
+        );
+  const chip = state.revoked ? (
+    <StatusBadge status="revoked" />
+  ) : state.expired ? (
+    <StatusBadge status="expired" />
+  ) : (
+    <StatusBadge status="active" />
+  );
+  const expiryText =
+    state.expiry === 0n
+      ? 'No expiry set'
+      : new Date(Number(state.expiry) * 1000).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+
+  return (
+    <SpotlightCard className="rounded-xl border border-text/10 bg-text/[0.03]">
+      <CornerTicks />
+      <div className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-text/45">
+            Hall pass · session key
+          </p>
+          <p className="mt-1 flex items-center font-mono text-sm text-text/90">
+            {truncateAddress(state.sessionKey)}
+            <CopyButton value={state.sessionKey} label="Copy session key" />
+          </p>
+        </div>
+        {chip}
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text/45">
+            Per payment
+          </dt>
+          <dd className="mt-1 flex items-center gap-1.5 font-display text-base font-extrabold text-text">
+            <TokenIcon token="USDC" size={16} />
+            {formatNativeUsdc(state.perTxCapWei)}{' '}
+            <span className="text-xs font-bold text-text/50">USDC</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text/45">
+            Window cap
+          </dt>
+          <dd className="mt-1 flex items-center gap-1.5 font-display text-base font-extrabold text-text">
+            <TokenIcon token="USDC" size={16} />
+            {formatNativeUsdc(state.windowCapWei)}{' '}
+            <span className="text-xs font-bold text-text/50">USDC</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text/45">
+            Remaining
+          </dt>
+          <dd className="mt-1 flex items-center gap-1.5 font-display text-base font-extrabold text-amber">
+            <TokenIcon token="USDC" size={16} />
+            {formatNativeUsdc(remaining)}{' '}
+            <span className="text-xs font-bold text-text/50">USDC</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text/45">
+            Expires
+          </dt>
+          <dd className="mt-1 font-display text-base font-extrabold text-text">
+            {expiryText}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-xs text-text/50">
+          <span className="inline-flex items-center gap-1.5">
+            <TokenIcon token="USDC" size={14} />
+            {formatNativeUsdc(state.windowSpent)} of{' '}
+            {formatNativeUsdc(state.windowCapWei)} USDC spent{' '}
+            {fmtWindow(state.windowSecs)}
+          </span>
+          <span>{spentPct}%</span>
+        </div>
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-text/10">
+          <div
+            className="h-full rounded-full bg-amber transition-all duration-500"
+            style={{ width: `${spentPct}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-[11px] text-text/40">
+          Live from the plugin on Arc — caps cover{' '}
+          {state.tokens.length > 0
+            ? state.tokens.map(tokenLabel).join(' + ')
+            : 'USDC'}
+          .
+        </p>
+      </div>
+
+      <div className="mt-3">
+        <Link
+          to={`/app/session-keys?account=${account}`}
+          className="inline-flex min-h-[44px] items-center text-sm font-semibold text-amber hover:underline"
+        >
+          Manage this pass — revoke, inspect events →
+        </Link>
+      </div>
+      </div>
+    </SpotlightCard>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* One account card (balances + plugin count from chain)               */
 /* ------------------------------------------------------------------ */
 
@@ -378,6 +639,13 @@ function AccountCard({
 
       <div className="mt-5">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-text/50">
+          Hall pass
+        </p>
+        <SessionLifecycle account={account} hp={hp} />
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-text/50">
           Installed plugins
         </p>
         <PluginList account={account} />
@@ -541,17 +809,13 @@ function AccountsLive({ hp }: { hp: UseHallpass }) {
 
   if (!hp.isConnected) {
     return (
-      <EmptyState
-        icon={<IconWallet />}
-        line="Connect your wallet to see your smart accounts."
+      <TapeEmptyState
+        title="Connect your wallet to see your accounts."
+        copy="Your smart accounts and their hall passes are read live from Arc — nothing is shown until a wallet is connected."
         action={
-          <button
-            type="button"
-            onClick={hp.connect}
-            className="inline-flex min-h-[56px] items-center rounded-full bg-amber px-8 font-display text-lg font-extrabold text-ink"
-          >
+          <TapePrimaryAction onClick={hp.connect}>
             Connect wallet
-          </button>
+          </TapePrimaryAction>
         }
       />
     );
@@ -559,24 +823,32 @@ function AccountsLive({ hp }: { hp: UseHallpass }) {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold text-text md:text-4xl">
-            Accounts
-          </h1>
-          <p className="mt-1 text-text/60">
-            Your Circle smart accounts on Arc — balances and plugins read live
-            from chain.
-          </p>
+      {/* Header band — vendored reactbits Aurora, HALLPASS palette, calm. */}
+      <div className="relative mb-6 overflow-hidden rounded-2xl border border-text/10">
+        <div className="absolute inset-0" aria-hidden="true">
+          <Aurora />
         </div>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="inline-flex min-h-[52px] items-center rounded-full bg-amber px-7 font-display font-bold text-ink transition-transform duration-200 hover:scale-[1.03]"
-        >
-          Add account
-        </button>
+        <div className="relative flex flex-wrap items-end justify-between gap-4 p-6 md:p-8">
+          <div>
+            <h1 className="font-display text-3xl font-extrabold text-text md:text-4xl">
+              Accounts
+            </h1>
+            <p className="mt-1 text-text/60">
+              Your Circle smart accounts on Arc — balances and hall passes read
+              live from chain.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="inline-flex min-h-[52px] items-center rounded-full bg-amber px-7 font-display font-bold text-ink transition-transform duration-200 hover:scale-[1.03]"
+          >
+            Add account
+          </button>
+        </div>
       </div>
+
+      <StatsStrip />
 
       {showAdd ? (
         <div className="mb-6">
@@ -591,17 +863,14 @@ function AccountsLive({ hp }: { hp: UseHallpass }) {
       ) : null}
 
       {tracked.length === 0 && !showAdd ? (
-        <EmptyState
-          icon={<IconPlug />}
-          line="No smart accounts yet. Add one to install its first hall pass."
+        <TapeEmptyState
+          art="key3d"
+          title="No smart accounts yet — add one to start the tape."
+          copy="Paste a Circle smart account address. It's checked on-chain before it appears here — an empty list is honest, not broken."
           action={
-            <button
-              type="button"
-              onClick={openAdd}
-              className="inline-flex min-h-[56px] items-center rounded-full bg-amber px-8 font-display text-lg font-extrabold text-ink"
-            >
+            <TapePrimaryAction onClick={openAdd}>
               Add your first account
-            </button>
+            </TapePrimaryAction>
           }
         />
       ) : (

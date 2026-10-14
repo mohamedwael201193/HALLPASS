@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
+import TapeEmptyState, { TapePrimaryAction } from '../../components/TapeEmptyState'
 import TokenIcon, { type TokenKind } from '../../components/TokenIcon'
 
 /** Official mark for the row's token (the feed currently reports USDC amounts). */
@@ -128,7 +128,6 @@ function RowSkeleton() {
 /* --------------------------------- page ----------------------------------- */
 
 export default function Activity({ accountAddress }: ActivityProps) {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const account = accountAddress ?? searchParams.get('account') ?? ''
 
@@ -255,11 +254,14 @@ export default function Activity({ accountAddress }: ActivityProps) {
     return (
       <div>
         <PageHeader />
-        <EmptyState
-          title="No account selected"
-          description="Pick one of your smart accounts first — activity is tracked per account."
-          actionLabel="Go to my accounts"
-          onAction={() => navigate('/app/accounts')}
+        <TapeEmptyState
+          title="No account selected."
+          copy="Activity is tracked per account — install, spend, and revoke events for one smart account. Pick one of yours first."
+          action={
+            <TapePrimaryAction to="/app/accounts">
+              Go to my accounts
+            </TapePrimaryAction>
+          }
         />
       </div>
     )
@@ -334,30 +336,38 @@ export default function Activity({ accountAddress }: ActivityProps) {
       )}
 
       {state === 'ready' && items.length === 0 && (
-        <EmptyState
-          title="No activity yet"
-          description={
+        <TapeEmptyState
+          title="No activity yet."
+          copy={
             feedNote ??
-            'Nothing here yet. When your agent spends — or when the hall pass stops it — it shows up here.'
+            'Nothing here yet. When your agent spends — or when the hall pass stops it — the event shows up here, straight from the chain.'
           }
-          actionLabel="Review session keys"
-          onAction={() => navigate(`/app/session-keys?account=${account}`)}
+          action={
+            <TapePrimaryAction to={`/app/session-keys?account=${account}`}>
+              Review session keys
+            </TapePrimaryAction>
+          }
         />
       )}
 
       {state === 'ready' && items.length > 0 && visible.length === 0 && (
-        <EmptyState
-          title={filter === 'blocked' ? 'Nothing blocked' : filter === 'allowed' ? 'No allowed spends' : 'No matches'}
-          description={
+        <TapeEmptyState
+          title={filter === 'blocked' ? 'Nothing blocked.' : filter === 'allowed' ? 'No allowed spends.' : 'No matches.'}
+          copy={
             filter === 'blocked'
               ? 'Nothing has been blocked in the loaded activity. When the hall pass stops a spend, the reason and the fix show up here.'
               : 'No rows match the current filters in the loaded activity. Try widening them, or load older rows.'
           }
-          actionLabel="Clear filters"
-          onAction={() => {
-            setFilter('all')
-            setKeyFilter('all')
-          }}
+          action={
+            <TapePrimaryAction
+              onClick={() => {
+                setFilter('all')
+                setKeyFilter('all')
+              }}
+            >
+              Clear filters
+            </TapePrimaryAction>
+          }
         />
       )}
 
