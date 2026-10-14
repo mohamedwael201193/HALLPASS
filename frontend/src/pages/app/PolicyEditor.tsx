@@ -7,7 +7,9 @@
  *
  * Spec sources: build bible §4.2 (policy amounts are native wei, 18 decimals;
  * `updatePolicy` is an installed execution function called through the account
- * fallback) and §8.4 (plain-language controls, exact-values row, validation).
+ * fallback) and §8.4 (plain-language controls, exact-values row, validation);
+ * design standard §6 (react-hook-form + zod as the only form pattern), §7
+ * (dashboard simplicity checklist), §9 (HALLPASS identity tokens).
  *
  * HARD RULES honoured here:
  * - Save NEVER fakes success. Until F9 wires the real on-chain update, the
@@ -15,6 +17,11 @@
  *   it reports the real tx hash + explorer link, or the real error.
  * - Every value shown comes from props (read from chain by the parent screen).
  * - Plain words, zero jargon. Amber accents. Mobile-usable.
+ * - Preview panel: sentence case, 16–18px, ~60ch measure (design standard §1).
+ * - INP < 200ms: every keystroke/drag does only string state updates plus
+ *   one cheap parseUnits; no layout reads, no heavy computation in render.
+ * - No animations on this screen beyond the save-button spinner, which stops
+ *   under prefers-reduced-motion. No shaders, no cursor gimmicks on dashboard.
  *
  * WIRING (for F9 / the dashboard worker): pass `onSave` — a function that
  * submits the real `updatePolicy(...)` transaction through the account and
@@ -24,23 +31,19 @@
 
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useFieldArray, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { getAddress, isAddress, parseUnits } from 'viem'
 import { EmptyState } from '../../components/EmptyState'
 
 /* ------------------------------------------------------------------ */
-/* Types                                                               */
+/* Types + validation schema                                           */
 /* ------------------------------------------------------------------ */
 
 export interface AllowlistEntry {
   address: string
   label: string
-}
-
-export interface SessionPolicyDraft {
-  perTxCapUsdc: string
-  /** Local "YYYY-MM-DDTHH:mm" from a datetime-local input. */
-  expiryLocal: string
-  allowlist: AllowlistEntry[]
 }
 
 export interface OnChainPolicyValues {
@@ -71,6 +74,57 @@ export interface PolicyEditorProps {
 
 const EXPLORER_TX = 'https://explorer.arc.io/tx/'
 
+const addressEntrySchema = z.object({
+  address: z
+    .string()
+    .trim()
+    .min(1, 'Paste the destination address here.')
+    .refine(
+      (v) => isAddress(v),
+      'That address doesn’t look right — it should start with 0x and be 42 characters long.',
+    ),
+  label: z.string(),
+})
+
+const policyFormSchema = z.object({
+  perTxCapUsdc: z
+    .string()
+    .trim()
+    .min(1, 'Type an amount, like 0.10.')
+    .refine(
+      (v) => {
+        const n = Number(v)
+        return Number.isFinite(n) && n > 0
+      },
+      'Cap must be more than 0 — type an amount like 0.10.',
+    )
+    .refine(
+      (v) => {
+        try {
+          parseUnits(v, 18)
+          return true
+        } catch {
+          return false
+        }
+      },
+      'That amount can’t be turned into an on-chain value — use at most 18 decimals.',
+    ),
+  expiryLocal: z
+    .string()
+    .min(1, 'Pick a date and time for the expiry.')
+    .refine((v) => {
+      const ms = new Date(v).getTime()
+      return !Number.isNaN(ms)
+    }, 'That date and time could not be read — pick it from the calendar.')
+    .refine((v) => {
+      const ms = new Date(v).getTime()
+      return ms > Date.now()
+    }, 'Expiry must be in the future — a hall pass that already ended protects nothing.'),
+  allowlist: z.array(addressEntrySchema),
+})
+
+type PolicyFormValues = z.infer<typeof policyFormSchema>
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -82,7 +136,6 @@ function truncateAddress(a: string): string {
 function formatUsdc(raw: string): string {
   const n = Number(raw)
   if (!Number.isFinite(n)) return raw
-  // Up to 6 decimals (ERC-20 USDC), no trailing zeros.
   return n.toLocaleString('en-US', { maximumFractionDigits: 6 })
 }
 
@@ -109,35 +162,50 @@ function toLocalInputValue(unix: bigint): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function isValidAddress(v: string): boolean {
-  return isAddress(v.trim())
-}
-
-function checksummed(v: string): string {
-  try {
-    return getAddress(v.trim())
-  } catch {
-    return v.trim()
+function defaultValuesFor(initialPolicy?: PolicyEditorProps['initialPolicy']): PolicyFormValues {
+  return {
+    perTxCapUsdc:
+      initialPolicy?.perTxCapWei !== undefined
+        ? (Number(initialPolicy.perTxCapWei) / 1e18).toString()
+        : '0.10',
+    expiryLocal:
+      initialPolicy?.expiryUnix !== undefined && initialPolicy.expiryUnix > 0n
+        ? toLocalInputValue(initialPolicy.expiryUnix)
+        : '',
+    allowlist: (initialPolicy?.allowlist ?? []).map((e) => ({
+      address: e.address,
+      label: e.label ?? '',
+    })),
   }
 }
 
 /* ------------------------------------------------------------------ */
-/* Field components                                                    */
+/* Small presentational pieces (design tokens §9)                       */
 /* ------------------------------------------------------------------ */
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="font-body text-sm font-semibold text-ink">{children}</p>
+  return <p className="font-body text-base font-semibold text-ink">{children}</p>
 }
 
 function FieldHint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 font-body text-xs text-ink/55">{children}</p>
+  return <p className="mt-1 font-body text-sm leading-relaxed text-ink/55">{children}</p>
 }
 
 function FieldError({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="mt-1 font-body text-xs font-medium text-[#b0523c]">
+    <p role="alert" className="mt-1 font-body text-sm font-medium leading-relaxed text-[#b0523c]">
       {children}
     </p>
+  )
+}
+
+/** Button-internal spinner: transform-only; stops under prefers-reduced-motion. */
+function ButtonSpinner() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none"
+    />
   )
 }
 
@@ -151,52 +219,34 @@ export function PolicyEditor({
   onSave,
   saveDisabledReason = 'Saving is still being connected to the on-chain policy contract — nothing will be sent until the connection is live.',
 }: PolicyEditorProps) {
-  const [draft, setDraft] = useState<SessionPolicyDraft>(() => ({
-    perTxCapUsdc:
-      initialPolicy?.perTxCapWei !== undefined
-        ? (Number(initialPolicy.perTxCapWei) / 1e18).toString()
-        : '0.10',
-    expiryLocal:
-      initialPolicy?.expiryUnix !== undefined && initialPolicy.expiryUnix > 0n
-        ? toLocalInputValue(initialPolicy.expiryUnix)
-        : '',
-    allowlist: (initialPolicy?.allowlist ?? []).map((e) => ({
-      address: e.address,
-      label: e.label ?? '',
-    })),
-  }))
+  const navigate = useNavigate()
+
+  const {
+    register,
+    control,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<PolicyFormValues>({
+    resolver: zodResolver(policyFormSchema),
+    mode: 'onChange',
+    defaultValues: defaultValuesFor(initialPolicy),
+  })
+
+  const { fields, append, remove } = useFieldArray({ control, name: 'allowlist' })
+
   const [copied, setCopied] = useState(false)
   const [showExact, setShowExact] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedTx, setSavedTx] = useState<string | null>(null)
 
-  /* ---------------- validation (human words, never raw errors) ---------------- */
+  // Live values for the preview — cheap reads, no heavy work per keystroke.
+  const perTxCapUsdc = watch('perTxCapUsdc')
+  const expiryLocal = watch('expiryLocal')
+  const allowlistWatched = watch('allowlist')
 
-  const capNum = Number(draft.perTxCapUsdc)
-  const capError =
-    draft.perTxCapUsdc.trim() === '' || !Number.isFinite(capNum) || capNum <= 0
-      ? 'Cap must be more than 0 — type an amount like 0.10.'
-      : null
-
-  const expiryUnix = toUnixSeconds(draft.expiryLocal)
-  const expiryError = !draft.expiryLocal
-    ? 'Pick a date and time for the expiry.'
-    : expiryUnix === null
-      ? 'That date and time could not be read — pick it from the calendar.'
-      : expiryUnix * 1000 <= Date.now()
-        ? 'Expiry must be in the future — a hall pass that already ended protects nothing.'
-        : null
-
-  const allowlistErrors: Record<number, string> = {}
-  draft.allowlist.forEach((row, i) => {
-    if (!row.address.trim()) {
-      allowlistErrors[i] = 'Paste the destination address here.'
-    } else if (!isValidAddress(row.address)) {
-      allowlistErrors[i] = 'That address doesn’t look right — it should start with 0x and be 42 characters long.'
-    }
-  })
-  const formValid = !capError && !expiryError && Object.keys(allowlistErrors).length === 0
+  const formValid = isValid
+  const expiryUnix = toUnixSeconds(expiryLocal)
 
   /* ---------------- on-chain values (exact, for the collapsible row) ---------------- */
 
@@ -204,47 +254,59 @@ export function PolicyEditor({
     if (!formValid || expiryUnix === null) return null
     let wei: bigint
     try {
-      wei = parseUnits(draft.perTxCapUsdc.trim(), 18)
+      wei = parseUnits(perTxCapUsdc.trim(), 18)
     } catch {
       return null
     }
     return {
       perTxCapWei: wei,
       expiryUnix: BigInt(expiryUnix),
-      allowlist: draft.allowlist.map((r) => checksummed(r.address)),
+      allowlist: allowlistWatched.map((r) => {
+        try {
+          return getAddress(r.address.trim())
+        } catch {
+          return r.address.trim()
+        }
+      }),
     }
-  }, [draft, formValid, expiryUnix])
+  }, [formValid, expiryUnix, perTxCapUsdc, allowlistWatched])
 
-  /* ---------------- live preview sentence ---------------- */
+  /* ---------------- live preview — plain-words imperative block ----------------
+     Sentence case, 16–18px, ~60ch measure (design standard §1). Updates as
+     you type; stays honest when a field is invalid or empty. */
 
   const preview = useMemo(() => {
-    const capPart = capError ? 'an unset per-payment amount' : `up to ${formatUsdc(draft.perTxCapUsdc.trim())} USDC per payment`
+    const capError = errors.perTxCapUsdc
+    const expiryError = errors.expiryLocal
+    const capPart = capError
+      ? 'an unset per-payment amount'
+      : `up to ${formatUsdc(perTxCapUsdc.trim())} USDC per payment`
     let destPart: string
-    if (draft.allowlist.length === 0) {
+    if (allowlistWatched.length === 0) {
       destPart = 'to anyone — there are no destination limits'
     } else {
-      const labels = draft.allowlist
+      const labels = allowlistWatched
         .map((r) => r.label.trim() || truncateAddress(r.address))
         .filter(Boolean)
-      const n = draft.allowlist.length
-      destPart = `only to ${n === 1 ? 'this 1 destination' : `these ${n} destinations`}${labels.length ? ` (${labels.join(', ')})` : ''}`
+      const n = allowlistWatched.length
+      destPart = `only to ${n === 1 ? 'this 1 destination' : `these ${n} destinations`}${
+        labels.length ? ` (${labels.join(', ')})` : ''
+      }`
     }
-    const expiryPart = expiryError || expiryUnix === null
-      ? 'with no valid expiry set yet'
-      : `until ${formatDateTime(new Date(expiryUnix * 1000))}`
+    const expiryPart =
+      expiryError || expiryUnix === null
+        ? 'with no valid expiry set yet'
+        : `until ${formatDateTime(new Date(expiryUnix * 1000))}`
     return `Your agent may spend ${capPart}, ${destPart}, ${expiryPart}.`
-  }, [draft, capError, expiryError, expiryUnix])
+  }, [errors.perTxCapUsdc, errors.expiryLocal, perTxCapUsdc, allowlistWatched, expiryUnix])
 
   /* ---------------- save (real tx only — never faked) ---------------- */
 
-  const saveBlocker: string | null =
-    !sessionKeyAddress
-      ? 'Select a session key first — there is nothing to save a policy for.'
-      : !formValid
-        ? 'Fix the problems marked above before saving.'
-        : !onSave
-          ? saveDisabledReason
-          : null
+  const saveBlocker: string | null = !formValid
+    ? 'Fix the problems marked above before saving.'
+    : !onSave
+      ? saveDisabledReason
+      : null
 
   async function handleSave() {
     if (saveBlocker || !onSave || !onChain) return
@@ -268,14 +330,13 @@ export function PolicyEditor({
     }
   }
 
-  /* ---------------- no session key → named next action, no dead end ---------------- */
+  /* ---------------- no session key → shared empty state, one CTA ---------------- */
 
-  const navigate = useNavigate()
   if (!sessionKeyAddress) {
     return (
       <EmptyState
         title="No session key selected"
-        description="A policy belongs to one session key. Pick the key first, then set its bounds here."
+        description="Pick a session key first, then set its bounds here."
         actionLabel="Go to my accounts"
         onAction={() => navigate('/app/accounts')}
       />
@@ -283,9 +344,14 @@ export function PolicyEditor({
   }
 
   const key = sessionKeyAddress
+  const sliderValue = (() => {
+    const n = Number(perTxCapUsdc)
+    if (!Number.isFinite(n)) return 0
+    return Math.min(Math.max(n, 0), 1)
+  })()
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto w-full max-w-4xl">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -293,23 +359,23 @@ export function PolicyEditor({
             Hall pass policy
           </p>
           <h1 className="mt-1 font-display text-3xl font-bold text-text sm:text-4xl">
-            Set this key’s hall pass
+            Set this key&rsquo;s hall pass
           </h1>
         </div>
         <Link
           to="/app/accounts"
-          className="rounded-full border border-text/20 px-5 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
+          className="min-h-[44px] rounded-full border border-text/20 px-5 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
         >
           ← All keys
         </Link>
       </div>
 
-      {/* Session key identity */}
+      {/* Session key identity — one fact, one row */}
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-text/10 bg-text/5 px-5 py-4">
-        <span className="inline-block h-3 w-3 rounded-full bg-amber" aria-hidden />
-        <div className="min-w-0">
-          <p className="font-body text-xs text-text/50">Session key (the agent’s hot key)</p>
-          <p className="font-mono text-sm text-text sm:text-base" title={key}>
+        <span className="inline-block h-3 w-3 shrink-0 rounded-full bg-amber" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="font-body text-xs text-text/50">Session key — the agent&rsquo;s hot key</p>
+          <p className="break-all font-mono text-sm text-text sm:text-base" title={key}>
             {key}
           </p>
         </div>
@@ -324,7 +390,7 @@ export function PolicyEditor({
               })
               .catch(() => undefined)
           }}
-          className="ml-auto rounded-full border border-text/20 px-4 py-2 font-body text-xs font-semibold text-text transition-colors hover:border-amber hover:text-amber"
+          className="min-h-[44px] rounded-full border border-text/20 px-4 py-2 font-body text-xs font-semibold text-text transition-colors hover:border-amber hover:text-amber"
           aria-label="Copy session key address"
         >
           {copied ? 'Copied ✓' : 'Copy address'}
@@ -349,27 +415,31 @@ export function PolicyEditor({
                 min={0}
                 max={1}
                 step={0.005}
-                value={Number.isFinite(capNum) ? Math.min(Math.max(capNum, 0), 1) : 0}
-                onChange={(e) => setDraft((d) => ({ ...d, perTxCapUsdc: e.target.value }))}
                 aria-label="Max per payment slider, 0 to 1 USDC"
-                className="h-2 w-full min-h-[44px] cursor-pointer accent-[#ffb224]"
+                className="h-2 min-h-[44px] w-full cursor-pointer accent-[#ffb224]"
+                {...register('perTxCapUsdc')}
+                value={sliderValue}
+                onChange={(e) =>
+                  register('perTxCapUsdc').onChange({
+                    target: { name: 'perTxCapUsdc', value: e.target.value },
+                  })
+                }
               />
               <div className="relative w-32 shrink-0">
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={draft.perTxCapUsdc}
-                  onChange={(e) => setDraft((d) => ({ ...d, perTxCapUsdc: e.target.value }))}
                   aria-label="Max per payment in USDC"
-                  className="w-full rounded-xl border border-ink/20 bg-white py-3 pl-3 pr-12 font-body text-base font-semibold text-ink focus:border-[#ffb224] focus:outline-none"
+                  className="min-h-[44px] w-full rounded-xl border border-ink/20 bg-white py-3 pl-3 pr-12 font-body text-base font-semibold text-ink focus:border-[#ffb224] focus:outline-none"
+                  {...register('perTxCapUsdc')}
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-body text-xs text-ink/50">
                   USDC
                 </span>
               </div>
             </div>
-            {capError && <FieldError>{capError}</FieldError>}
-            {!capError && Number(draft.perTxCapUsdc) > 1 && (
+            {errors.perTxCapUsdc && <FieldError>{errors.perTxCapUsdc.message}</FieldError>}
+            {!errors.perTxCapUsdc && Number(perTxCapUsdc) > 1 && (
               <FieldHint>Slider shows up to 1 USDC — the typed value above is what counts.</FieldHint>
             )}
           </div>
@@ -380,18 +450,17 @@ export function PolicyEditor({
           <div>
             <FieldLabel>Expires</FieldLabel>
             <FieldHint>
-              When the hall pass ends. After this, the agent’s payments stop working
-              until you extend it.
+              When the hall pass ends. After this, the agent&rsquo;s payments stop
+              working until you extend it.
             </FieldHint>
             <input
               type="datetime-local"
-              value={draft.expiryLocal}
-              onChange={(e) => setDraft((d) => ({ ...d, expiryLocal: e.target.value }))}
               aria-label="Policy expiry date and time"
-              className="mt-3 w-full rounded-xl border border-ink/20 bg-white px-3 py-3 font-body text-base text-ink focus:border-[#ffb224] focus:outline-none"
+              className="mt-3 min-h-[44px] w-full rounded-xl border border-ink/20 bg-white px-3 py-3 font-body text-base text-ink focus:border-[#ffb224] focus:outline-none"
+              {...register('expiryLocal')}
             />
-            {expiryError ? (
-              <FieldError>{expiryError}</FieldError>
+            {errors.expiryLocal ? (
+              <FieldError>{errors.expiryLocal.message}</FieldError>
             ) : (
               expiryUnix !== null && (
                 <FieldHint>
@@ -405,17 +474,12 @@ export function PolicyEditor({
 
           {/* Destination allowlist */}
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <FieldLabel>Allowed destinations</FieldLabel>
               <button
                 type="button"
-                onClick={() =>
-                  setDraft((d) => ({
-                    ...d,
-                    allowlist: [...d.allowlist, { address: '', label: '' }],
-                  }))
-                }
-                className="rounded-full bg-ink px-4 py-2 font-body text-xs font-semibold text-text transition-transform hover:scale-105"
+                onClick={() => append({ address: '', label: '' })}
+                className="min-h-[44px] rounded-full bg-ink px-4 py-2 font-body text-xs font-semibold text-text transition-transform hover:scale-105"
               >
                 + Add destination
               </button>
@@ -425,27 +489,22 @@ export function PolicyEditor({
               apply. Add addresses to restrict it to just these.
             </FieldHint>
 
-            {draft.allowlist.length === 0 ? (
-              <p className="mt-3 rounded-xl border border-dashed border-ink/20 px-4 py-3 font-body text-sm text-ink/60">
+            {fields.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-dashed border-ink/20 px-4 py-3 font-body text-sm leading-relaxed text-ink/60">
                 No destinations yet — the agent may pay anyone, within the caps above.
               </p>
             ) : (
               <ul className="mt-3 space-y-3">
-                {draft.allowlist.map((row, i) => (
-                  <li key={i} className="rounded-xl border border-ink/15 bg-white p-3">
+                {fields.map((field, i) => (
+                  <li key={field.id} className="rounded-xl border border-ink/15 bg-white p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-body text-xs font-semibold text-ink/60">
+                      <p className="font-body text-sm font-semibold text-ink/60">
                         Destination {i + 1}
                       </p>
                       <button
                         type="button"
-                        onClick={() =>
-                          setDraft((d) => ({
-                            ...d,
-                            allowlist: d.allowlist.filter((_, j) => j !== i),
-                          }))
-                        }
-                        className="rounded-full px-3 py-1 font-body text-xs font-semibold text-[#b0523c] transition-colors hover:bg-[#b0523c]/10"
+                        onClick={() => remove(i)}
+                        className="min-h-[44px] rounded-full px-4 py-2 font-body text-xs font-semibold text-[#b0523c] transition-colors hover:bg-[#b0523c]/10"
                         aria-label={`Remove destination ${i + 1}`}
                       >
                         Remove
@@ -453,35 +512,21 @@ export function PolicyEditor({
                     </div>
                     <input
                       type="text"
-                      value={row.address}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          allowlist: d.allowlist.map((r, j) =>
-                            j === i ? { ...r, address: e.target.value } : r,
-                          ),
-                        }))
-                      }
                       placeholder="0x… (42 characters)"
                       spellCheck={false}
                       aria-label={`Destination ${i + 1} address`}
-                      className="mt-2 w-full rounded-lg border border-ink/20 px-3 py-2.5 font-mono text-sm text-ink focus:border-[#ffb224] focus:outline-none"
+                      className="mt-2 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2.5 font-mono text-sm text-ink focus:border-[#ffb224] focus:outline-none"
+                      {...register(`allowlist.${i}.address`)}
                     />
-                    {allowlistErrors[i] && <FieldError>{allowlistErrors[i]}</FieldError>}
+                    {errors.allowlist?.[i]?.address && (
+                      <FieldError>{errors.allowlist[i]?.address?.message}</FieldError>
+                    )}
                     <input
                       type="text"
-                      value={row.label}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          allowlist: d.allowlist.map((r, j) =>
-                            j === i ? { ...r, label: e.target.value } : r,
-                          ),
-                        }))
-                      }
                       placeholder="Label — e.g. API provider (optional)"
                       aria-label={`Destination ${i + 1} label`}
-                      className="mt-2 w-full rounded-lg border border-ink/20 px-3 py-2.5 font-body text-sm text-ink focus:border-[#ffb224] focus:outline-none"
+                      className="mt-2 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2.5 font-body text-sm text-ink focus:border-[#ffb224] focus:outline-none"
+                      {...register(`allowlist.${i}.label`)}
                     />
                   </li>
                 ))}
@@ -489,13 +534,13 @@ export function PolicyEditor({
             )}
           </div>
 
-          {/* Exact on-chain values */}
+          {/* Exact on-chain values — collapsible, user-verifiable */}
           <div className="mt-7">
             <button
               type="button"
               onClick={() => setShowExact((s) => !s)}
               aria-expanded={showExact}
-              className="font-body text-sm font-semibold text-ink/70 underline decoration-[#ffb224] decoration-2 underline-offset-4"
+              className="min-h-[44px] font-body text-sm font-semibold text-ink/70 underline decoration-[#ffb224] decoration-2 underline-offset-4"
             >
               {showExact ? 'Hide' : 'Show'} exact on-chain values
             </button>
@@ -528,31 +573,32 @@ export function PolicyEditor({
           </div>
         </section>
 
-        {/* ---------------- Live preview card ---------------- */}
+        {/* ---------------- Live preview + save ---------------- */}
         <section aria-label="What this allows" className="flex flex-col gap-6">
           <div className="rounded-2xl border border-[#ffb224]/40 bg-text/5 p-6 sm:p-8">
             <p className="font-body text-xs font-semibold uppercase tracking-widest text-amber">
-              Live preview — updates as you type
+              What this allows
             </p>
-            <p className="mt-4 font-display text-2xl font-bold leading-snug text-text">
+            {/* Plain-words block: sentence case, 16–18px, ~60ch measure. */}
+            <p className="mt-4 max-w-[60ch] font-body text-lg leading-relaxed text-text">
               {preview}
             </p>
             {!formValid && (
-              <p className="mt-3 font-body text-sm text-text/50">
-                Finish the details on the left to see the full summary — and to enable
-                saving.
+              <p className="mt-3 max-w-[60ch] font-body text-sm leading-relaxed text-text/50">
+                Finish the details on the left to see the full summary — and to
+                enable saving.
               </p>
             )}
           </div>
 
-          {/* Save */}
+          {/* ONE primary action per screen (design standard §7.1). */}
           <div className="rounded-2xl border border-text/10 bg-text/5 p-6 sm:p-8">
             {savedTx ? (
-              <div role="status">
+              <div role="status" aria-live="polite">
                 <p className="font-display text-xl font-bold text-amber">
                   Policy saved on-chain ✓
                 </p>
-                <p className="mt-2 break-all font-body text-sm text-text/70">
+                <p className="mt-2 max-w-[60ch] break-all font-body text-sm leading-relaxed text-text/70">
                   Transaction:{' '}
                   <a
                     href={`${EXPLORER_TX}${savedTx}`}
@@ -566,7 +612,7 @@ export function PolicyEditor({
                 <button
                   type="button"
                   onClick={() => setSavedTx(null)}
-                  className="mt-4 rounded-full border border-text/20 px-5 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
+                  className="mt-4 min-h-[44px] rounded-full border border-text/20 px-5 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
                 >
                   Edit again
                 </button>
@@ -577,27 +623,33 @@ export function PolicyEditor({
                   type="button"
                   disabled={saveBlocker !== null || saving}
                   onClick={handleSave}
-                  className={`w-full rounded-full py-4 font-display text-lg font-bold transition-all ${
+                  aria-busy={saving}
+                  className={`flex min-h-[56px] w-full items-center justify-center gap-3 rounded-full py-4 font-display text-lg font-bold transition-all ${
                     saveBlocker !== null || saving
                       ? 'cursor-not-allowed bg-text/10 text-text/40'
                       : 'bg-amber text-ink hover:bg-amber/90 active:scale-[0.98]'
                   }`}
                 >
+                  {saving && <ButtonSpinner />}
                   {saving ? 'Waiting for your wallet…' : 'Save policy on-chain'}
                 </button>
                 {saveBlocker && (
-                  <p role="note" className="mt-3 font-body text-sm text-text/60">
+                  <p role="note" className="mt-3 max-w-[60ch] font-body text-sm leading-relaxed text-text/60">
                     Save is unavailable: {saveBlocker}
                   </p>
                 )}
                 {!saveBlocker && (
-                  <p className="mt-3 font-body text-sm text-text/60">
+                  <p className="mt-3 max-w-[60ch] font-body text-sm leading-relaxed text-text/60">
                     Saving asks your wallet to sign one real transaction. Your current
                     on-chain policy stays in force until the new one confirms.
                   </p>
                 )}
                 {saveError && (
-                  <p role="alert" className="mt-3 font-body text-sm font-medium text-[#e08a70]">
+                  <p
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-3 max-w-[60ch] font-body text-sm font-medium leading-relaxed text-[#e08a70]"
+                  >
                     {saveError}
                   </p>
                 )}
@@ -605,7 +657,7 @@ export function PolicyEditor({
             )}
           </div>
 
-          <p className="font-body text-xs leading-relaxed text-text/40">
+          <p className="max-w-[60ch] font-body text-xs leading-relaxed text-text/40">
             The old policy keeps protecting the account until the new transaction is
             confirmed — there is never a gap where the agent is unbounded.
           </p>

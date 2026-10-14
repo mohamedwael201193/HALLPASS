@@ -278,8 +278,9 @@ contract HallpassPluginTest is Test {
         assertEq(_winStart(), block.timestamp, "window restarted");
         assertFalse(_revoked(), "revocation cleared");
 
-        // a spend over the OLD cap but under the NEW cap now passes
-        _validateAs(sessionKey, _execCalldata(payeeA, 0.03 ether));
+        // a spend over the OLD cap but under the NEW cap now passes (to the
+        // newly allowlisted destination — payeeA was replaced by payeeB)
+        _validateAs(sessionKey, _execCalldata(payeeB, 0.03 ether));
     }
 
     function test_UpdatePolicyRejectsBadInit() public {

@@ -362,24 +362,24 @@ export function decodeHallpassRevert(data: Hex): DecodedRevert {
       case 'PerTxCapExceeded':
         return {
           name: decoded.errorName,
-          message: `Blocked: ${formatNativeUsdc(a[0] as bigint)} USDC exceeds your ${formatNativeUsdc(a[1] as bigint)} USDC per-payment cap. Nothing was spent.`,
+          message: `Blocked: ${formatNativeUsdc(a[0] as bigint)} USDC exceeds your ${formatNativeUsdc(a[1] as bigint)} USDC per-payment cap. Nothing was spent. Fix: the owner can raise the per-payment cap in the policy editor.`,
         };
       case 'WindowCapExceeded':
         return {
           name: decoded.errorName,
-          message: `Blocked: this payment would take the rolling window to ${formatNativeUsdc(a[0] as bigint)} USDC, over the ${formatNativeUsdc(a[1] as bigint)} USDC window cap. Nothing was spent.`,
+          message: `Blocked: this payment would take the rolling window to ${formatNativeUsdc(a[0] as bigint)} USDC, over the ${formatNativeUsdc(a[1] as bigint)} USDC window cap. Nothing was spent. Fix: wait for the window to reset, or the owner can raise the window cap.`,
         };
       case 'SessionExpired':
         return {
           name: decoded.errorName,
-          message: `Blocked: this session key expired on ${new Date(Number(a[1] as bigint) * 1000).toUTCString()}. The owner can register a new key.`,
+          message: `Blocked: this session key expired on ${new Date(Number(a[1] as bigint) * 1000).toUTCString()}. Nothing was spent. Fix: the owner can register a new session key.`,
         };
       case 'SessionRevoked':
-        return { name: decoded.errorName, message: 'Blocked: this session key was revoked by the owner. Nothing was spent.' };
+        return { name: decoded.errorName, message: 'Blocked: this session key was revoked by the owner. Nothing was spent. Fix: the owner can register a new key.' };
       case 'RecipientNotAllowed':
         return {
           name: decoded.errorName,
-          message: `Blocked: ${a[0] as string} is not on this session's recipient allowlist. Nothing was spent.`,
+          message: `Blocked: ${a[0] as string} is not on this session's recipient allowlist. Nothing was spent. Fix: the owner can add this address to the allowlist.`,
         };
       case 'UnknownSigner':
         return { name: decoded.errorName, message: `Blocked: ${a[0] as string} is not an authorized signer for this account.` };

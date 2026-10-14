@@ -393,7 +393,7 @@ contract HallpassPlugin is IPlugin {
         if (v < 27) v += 27;
         require(v == 27 || v == 28, "bad v");
         require(
-            uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A450ABBEB08BC4FBE82A,
+            uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
             "malleable s"
         );
         address signer = ecrecover(hash, v, r, s);

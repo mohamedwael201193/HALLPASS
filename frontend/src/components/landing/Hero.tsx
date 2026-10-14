@@ -1,9 +1,6 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, MotionConfig } from "framer-motion";
+import Logo from "./Logo";
 import heroImg from "@/assets/hero.png";
 
 type Stats = {
@@ -12,178 +9,195 @@ type Stats = {
   spendsBlocked: number;
 };
 
-const STAT_DEFS: { key: keyof Stats; label: string }[] = [
-  { key: "pluginsInstalled", label: "plugins installed" },
-  { key: "spendsAllowed", label: "spends allowed" },
-  { key: "spendsBlocked", label: "spends blocked" },
-];
-
-function useLiveStats(): { stats: Stats | null; error: boolean } {
+/**
+ * Live stats are rendered ONLY when the API returns real values.
+ * Per design law §3: no real stat → the row is omitted. Never zeros-with-caption.
+ */
+function useLiveStats(): Stats | null {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/stats")
       .then((r) => {
-        if (!r.ok) throw new Error("stats fetch failed");
+        if (!r.ok) throw new Error("stats unavailable");
         return r.json();
       })
       .then((data: Stats) => {
-        if (!cancelled) setStats(data);
+        const vals = [data.pluginsInstalled, data.spendsAllowed, data.spendsBlocked];
+        if (!cancelled && vals.every((v) => Number.isFinite(v))) setStats(data);
       })
       .catch(() => {
-        // Honest zeros: the live feed is down, so we show 0 — never invented numbers.
-        if (!cancelled) {
-          setError(true);
-          setStats({ pluginsInstalled: 0, spendsAllowed: 0, spendsBlocked: 0 });
-        }
+        /* row stays omitted — nothing real to show */
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { stats, error };
+  return stats;
 }
 
-const ease = [0.22, 1, 0.36, 1] as const;
+const HEADLINE_LINES: { words: string[]; accent?: boolean }[] = [
+  { words: ["KEYS"] },
+  { words: ["WITH", "A"] },
+  { words: ["BOUNCER."], accent: true },
+];
+
+const TICKER = "POLICIES, ENFORCED. · SESSIONS, SCOPED. · REVOCABLE ANYTIME. · PROVEN ON MAINNET. · ";
 
 export default function Hero() {
-  const { stats, error } = useLiveStats();
+  const stats = useLiveStats();
 
   return (
-    <section className="relative overflow-hidden bg-[#121110] text-[#FFF9EF]">
-      <div className="relative mx-auto grid min-h-screen max-w-7xl grid-cols-1 items-center gap-10 px-6 pb-24 pt-32 lg:grid-cols-2 lg:px-10">
-        {/* ---- Type block ---- */}
-        <div className="relative z-10">
+    <MotionConfig reducedMotion="user">
+      <section id="top" className="relative overflow-hidden bg-[#121110] text-[#FFF9EF]">
+        {/* film-grain texture — near-zero risk, encouraged by §4 */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22/></filter><rect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.6%22/></svg>')]"
+        />
+
+        {/* ---- 1. small brand mark ---- */}
+        <div className="relative z-10 mx-auto flex max-w-7xl items-center justify-center gap-3 px-6 pt-32">
+          <Logo size={28} />
+          <span className="text-sm font-extrabold uppercase tracking-[0.35em] text-[#FFF9EF]/80">
+            Hall&nbsp;Pass
+          </span>
+        </div>
+
+        {/* ---- 2. ambient visual — melts into #121110 (edge-matched PNG + radial mask) ---- */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.2 }}
+          className="relative z-0 mx-auto mt-8 w-full max-w-5xl px-6"
+          aria-hidden="true"
+        >
+          <motion.div
+            animate={{ y: [0, -12, 0] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+            className="[mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black_60%,transparent_100%)]"
+          >
+            <img
+              src={heroImg}
+              alt=""
+              draggable={false}
+              className="h-auto w-full select-none"
+            />
+          </motion.div>
+        </motion.div>
+
+        {/* ---- 3. full-bleed marquee ticker ---- */}
+        <div
+          className="ticker relative z-10 mt-10 overflow-hidden border-y border-[#FFB224]/15 py-4"
+          aria-hidden="true"
+        >
+          <div className="ticker-track flex w-max whitespace-nowrap">
+            {[0, 1].map((i) => (
+              <span
+                key={i}
+                className="pr-4 text-lg font-extrabold uppercase tracking-[0.25em] text-[#FFB224]"
+              >
+                {TICKER.repeat(4)}
+              </span>
+            ))}
+          </div>
+          <style>{`
+            .ticker-track { animation: ticker-x 28s linear infinite; }
+            .ticker:hover .ticker-track { animation-play-state: paused; }
+            @keyframes ticker-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+            @media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
+          `}</style>
+        </div>
+
+        {/* ---- 4. giant 3-line all-caps headline ---- */}
+        <div className="relative z-10 mx-auto max-w-7xl px-6 pt-16 text-center lg:px-10">
+          <h1 className="text-[clamp(4rem,10vw,7.5rem)] font-black uppercase leading-[0.9] tracking-tight">
+            {HEADLINE_LINES.map((line, li) => (
+              <span key={li} className="block">
+                {line.words.map((word, wi) => (
+                  <motion.span
+                    key={wi}
+                    initial={{ opacity: 0, y: 28 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.5,
+                      ease: "easeOut",
+                      delay: 0.15 + (li * 2 + wi) * 0.09,
+                    }}
+                    className={`inline-block ${line.accent ? "text-[#FFB224]" : ""}`}
+                  >
+                    {word}
+                    {wi < line.words.length - 1 ? " " : ""}
+                  </motion.span>
+                ))}
+              </span>
+            ))}
+          </h1>
+
+          {/* ---- subline: one line, sentence case, below the headline ---- */}
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#FFB224]/40 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-[#FFB224]"
+            transition={{ duration: 0.6, delay: 0.7, ease: "easeOut" }}
+            className="mx-auto mt-8 max-w-[60ch] text-lg leading-[1.6] text-[#FFF9EF]/70"
           >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FFB224]" />
-            Live on Arc mainnet · ERC-6900
+            Session-key policy plugins for agent smart wallets — spend inside the
+            bounds you set, everything else reverts on-chain.
           </motion.p>
 
-          <motion.h1
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, delay: 0.1, ease }}
-            className="text-[clamp(3rem,7.5vw,6.5rem)] font-black leading-[0.95] tracking-tight"
-          >
-            Give your agent a <span className="text-[#FFB224]">hall&nbsp;pass</span>
-            <br />
-            — not your keys.
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.25, ease }}
-            className="mt-6 max-w-xl text-lg leading-relaxed text-[#FFF9EF]/70 md:text-xl"
-          >
-            Handing your agent a private key is reckless. Hall&nbsp;Pass installs a
-            policy plugin on your smart wallet, so it can spend only inside the
-            bounds you set — caps, windows, expiry, destinations — and everything
-            else reverts on-chain.
-          </motion.p>
-
+          {/* ---- 5. ONE CTA row: one primary + one ghost ---- */}
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4, ease }}
-            className="mt-10 flex flex-wrap items-center gap-4"
+            transition={{ duration: 0.6, delay: 0.85, ease: "easeOut" }}
+            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <Link
+            <a
               href="/app"
-              className="rounded-full bg-[#FFB224] px-9 py-4 text-base font-bold text-[#121110] transition-transform hover:scale-[1.04] active:scale-[0.98]"
+              className="rounded-full bg-[#FFB224] px-10 py-4 text-base font-bold text-[#121110] transition-transform hover:scale-[1.04] active:scale-[0.98]"
             >
-              Launch app
-            </Link>
-            <Link
+              Install the plugin
+            </a>
+            <a
               href="#live-proof"
-              className="rounded-full border border-[#FFF9EF]/30 px-9 py-4 text-base font-semibold text-[#FFF9EF] transition-colors hover:border-[#FFB224] hover:text-[#FFB224]"
+              className="rounded-full border border-[#FFF9EF]/30 px-10 py-4 text-base font-semibold text-[#FFF9EF] transition-colors hover:border-[#FFB224] hover:text-[#FFB224]"
             >
               See live proof
-            </Link>
+            </a>
           </motion.div>
 
-          {/* ---- Live stats row ---- */}
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.55, ease }}
-            className="mt-14 border-t border-[#FFF9EF]/10 pt-8"
-            aria-live="polite"
-          >
-            <div className="grid grid-cols-3 gap-6">
-              {STAT_DEFS.map((s) => (
-                <div key={s.key}>
-                  {stats === null ? (
-                    <div className="h-10 w-20 animate-pulse rounded-md bg-[#FFF9EF]/10" />
-                  ) : (
-                    <div className="text-4xl font-extrabold tabular-nums text-[#FFB224] md:text-5xl">
-                      {stats[s.key].toLocaleString()}
-                    </div>
-                  )}
+          {/* ---- 6. live-stats row: real values only — omitted otherwise ---- */}
+          {stats !== null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6 }}
+              className="mx-auto mt-16 grid max-w-3xl grid-cols-3 gap-6 border-t border-[#FFF9EF]/10 pb-24 pt-8"
+              aria-live="polite"
+            >
+              {(
+                [
+                  { value: stats.pluginsInstalled, label: "plugins installed" },
+                  { value: stats.spendsAllowed, label: "spends allowed" },
+                  { value: stats.spendsBlocked, label: "spends blocked" },
+                ] as const
+              ).map((s) => (
+                <div key={s.label}>
+                  <div className="text-4xl font-extrabold tabular-nums text-[#FFF9EF] md:text-5xl">
+                    {s.value.toLocaleString()}
+                  </div>
                   <div className="mt-2 text-xs font-medium uppercase tracking-[0.18em] text-[#FFF9EF]/50">
                     {s.label}
                   </div>
                 </div>
               ))}
-            </div>
-            <p className="mt-4 text-xs text-[#FFF9EF]/40">
-              {stats === null
-                ? "Loading live on-chain stats…"
-                : error
-                  ? "Live feed unavailable — showing zeros, not estimates."
-                  : "Live from Arc mainnet."}
-            </p>
-          </motion.div>
+            </motion.div>
+          )}
+          {stats === null && <div className="pb-24" aria-hidden="true" />}
         </div>
-
-        {/* ---- Hero visual: melts into #121110 (image edges are pixel-matched) ---- */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1.2, delay: 0.2, ease }}
-          className="relative z-0 lg:-mr-16"
-          aria-hidden="true"
-        >
-          <motion.div
-            animate={{ y: [0, -14, 0] }}
-            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-            className="[mask-image:radial-gradient(ellipse_78%_78%_at_50%_50%,black_62%,transparent_100%)]"
-          >
-            <Image
-              src={heroImg}
-              alt=""
-              priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="h-auto w-full select-none"
-              draggable={false}
-            />
-          </motion.div>
-          {/* Amber ambient bleed — subtle, keeps the melt seamless */}
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_50%_at_50%_45%,rgba(255,178,36,0.10),transparent_70%)]" />
-        </motion.div>
-      </div>
-
-      {/* Scroll cue */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.4, duration: 0.8 }}
-        className="absolute bottom-8 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 md:flex"
-        aria-hidden="true"
-      >
-        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#FFF9EF]/40">
-          Scroll
-        </span>
-        <div className="h-10 w-px bg-gradient-to-b from-[#FFB224] to-transparent" />
-      </motion.div>
-    </section>
+      </section>
+    </MotionConfig>
   );
 }

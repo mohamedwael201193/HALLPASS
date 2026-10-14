@@ -2,13 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* HALLPASS brand tokens (prompt §4) — also mirrored in tailwind.config.js */
+/* HALLPASS identity tokens — design-standard.md §9 is the source of truth.
+   Page ratio ~90% charcoal / ~8% paper / ~2% amber. Amber is EARNED:
+   primary CTAs, one hero word, ticker text, allow/deny status markers only. */
 :root {
-  --hp-ink: #121110; /* page / hero / section backgrounds */
-  --hp-amber: #ffb224; /* THE permission glow — allowed moments, CTAs, highlights */
-  --hp-cream: #faf6ee; /* light contrast sections, cards on dark */
+  --hp-ink: #121110; /* deep charcoal — page / hero / section backgrounds */
+  --hp-amber: #ffb224; /* hall-pass amber — THE permission glow */
+  --hp-cream: #faf6ee; /* cream — light alternate bands, footer, proof sections */
   --hp-text: #fff9ef; /* headlines + body on dark */
   --hp-muted-red: #b0523c; /* blocked / denied — sparingly, never the hero color */
+  --hp-marquee-duration: 32s;
+  --hp-marquee-gap: 3rem;
 }
 
 html {
@@ -24,11 +28,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Display = ONE heavy grotesque (Archivo Black), body = Inter.
+   NO serif anywhere (design standard §1). */
 h1,
 h2,
 h3,
 .font-display {
-  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Archivo Black', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {
@@ -55,4 +61,93 @@ h3,
 * {
   scrollbar-width: thin;
   scrollbar-color: #2b2926 var(--hp-ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* Signature marquee ticker (design standard §5: INFINITE LOOPS)        */
+/* Seamless CSS translateX loop, pause on hover/focus. Usage:           */
+/*   <div class="hp-marquee"><div class="hp-marquee-track">              */
+/*     <span>…content…</span><span aria-hidden>…same…</span>              */
+/*   </div></div>                                                       */
+/* Override speed/gap per instance: style="--hp-marquee-duration:20s"   */
+/* ------------------------------------------------------------------ */
+.hp-marquee {
+  overflow: hidden;
+  contain: paint; /* keeps the loop cheap (60fps law) */
+}
+.hp-marquee-track {
+  display: flex;
+  width: max-content;
+  gap: var(--hp-marquee-gap);
+  padding-right: var(--hp-marquee-gap); /* gap symmetry keeps -50% seamless */
+  will-change: transform;
+  animation: hp-marquee-x var(--hp-marquee-duration) linear infinite;
+}
+.hp-marquee:hover .hp-marquee-track,
+.hp-marquee:focus-within .hp-marquee-track {
+  animation-play-state: paused;
+}
+@keyframes hp-marquee-x {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Hero primary-CTA shimmer (design standard §6).                       */
+/* LANDING HERO ONLY: perimeter shimmer, ~3s, radius 100px.             */
+/* Sheen travels via transform ONLY (60fps law).                        */
+/* NEVER in forms, dialogs, or the dashboard.                          */
+/* ------------------------------------------------------------------ */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+  border-radius: 100px;
+  isolation: isolate;
+}
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 249, 239, 0.45) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  animation: hp-shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes hp-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion is NON-NEGOTIABLE (design standard §5).                */
+/* Loops stop; reveals must render in final state; scroll is instant.   */
+/* JS/GSAP/framer-motion timelines must ALSO gate on                    */
+/* matchMedia('(prefers-reduced-motion: reduce)') — worker responsibility.*/
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .hp-marquee-track,
+  .btn-shimmer::after {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
