@@ -87,7 +87,7 @@ These are not product proofs — they are the live addresses the build and any j
 | 27 | Fork suite (Arc mainnet) | `forge test --fork-url` — 19/19 green (`contracts/test/HallpassFork.t.sol`) | **PROVEN** |
 | 28 | Backend API contract | `node --test backend/api/` — 32/32 green against `CONTRACT.md` v1.0.0 | **PROVEN** |
 | 29 | Fresh install→enforce→revoke dust E2E (build phase, 2026-10-14) | `QA/dust-e2e-report.md` — install `0x18d20d1f36645456b8614544c0b3a6237639ae150b6ab9e842c32e8c1c402ca0`; in-policy `0x9020636267e33400df6639d79d3a18bc7389f6152cb505039c49594f8e555953`; over-cap revert `PerTxCapExceeded(0.05,0.01)` `0x9fdc48e5a47d12ec08eeccbd8dccae3441d03de7e544b5f46d29124cefa074bf`; revoke `0xe1bf2980e4fdb2ff7ed4a2e9f6d308a9a191c4ce8ff499552ed9316a64d9f291`; post-revoke revert `SessionRevoked()` `0xb51c29dadc8e91a167ebecef2bbe5a550deae8b4976cff69b9869fe403d72f11` | **PROVEN on mainnet** |
-| 30 | Production plugin deploy (fixed binary) + Sourcify exact_match | Not done — founder's step (`contracts/DEPLOYMENT.md`) | SPECIFIED |
+| 30 | Production plugin deploy (fixed binary) + Sourcify exact_match | Deployed 2026-10-14: `0x8a81455a477deeA986ca48cE83ca89C5331Da793`, tx `0xf408ec17f3b9e915488fa901f190123fc56368f487ee6ee30eb80e065e86fe1c`, block 25959755. `cast code` confirms the FIXED malleability constant on-chain. Sourcify: `exact_match` (creation + runtime), verified 2026-10-14T17:46:52Z | **PROVEN** |
 | 31 | Dashboard stranger test on mainnet | Built, gates green; live userOp flow not yet executed through the UI | SPECIFIED |
 
 ### 2.6 Bytecode honesty — which binary the proofs ran against

@@ -136,8 +136,15 @@ Entries are appended here as build workers complete them. Nothing in this sectio
 - Budget: per-tx ≤ 0.01 except the install tx (0.01314 — cold SSTOREs, disclosed); total gas ≈ 0.0221 USDC.
 - Bytecode honesty: `0x7C91…` is pre-fix bytecode (verified via `cast code`); enforcement paths identical — the fix is proven by unit tests, and a fixed-binary production deploy is the founder's step.
 
+### B6 — 2026-10-14 — PRODUCTION DEPLOY of the fixed plugin (founder-authorized broadcast)
+
+- `scripts/deploy.sh` broadcast `HallpassPlugin` (H-1-fixed source) on Arc mainnet: **`0x8a81455a477deeA986ca48cE83ca89C5331Da793`**, tx `0xf408ec17f3b9e915488fa901f190123fc56368f487ee6ee30eb80e065e86fe1c`, block 25959755. Record: `contracts/deployments/arc-5042.json` (real values, no placeholders).
+- `cast code` verification: deployed bytecode contains the FIXED malleability constant `0x7FFF…B20A0`; the typo constant is absent.
+- Sourcify: **exact_match** (creation + runtime), verified 2026-10-14T17:46:52Z. Also fixed `contracts/script/VerifyHallpass.sh` (Sourcify API v1 removed; now uses v2 `/v2/contract/{chainId}/{address}`) — re-ran green.
+- Wiring: frontend → `VITE_PLUGIN_ADDRESS`; backend API → `PLUGIN_ADDRESS` env (default stays the H9 deployment the indexer data refers to). Documented in `contracts/DEPLOYMENT.md` §8.
+
 ### Upcoming (PLANNED)
 
-- **B6 (PLANNED):** production deploy of the fixed plugin (gasLimit ≥ 2.2M) + **Sourcify exact_match** — the re-judge's explicit gate; then re-prove the money-shots on the fixed deployment (founder's step, `contracts/DEPLOYMENT.md`).
-- **B7 (PLANNED):** relay service contract for `VITE_RELAY_URL` (currently throws `RelayNotConfiguredError`; dashboard self-relays) — or remove the relay path if self-relay stays the design.
-- **B8 (PLANNED):** submission package for the program deadline (2026-10-14 23:59 ET).
+- **B7 (PLANNED):** re-prove the money-shots against the production `0x8a81…793` deployment (in-policy spend, over-cap revert, userOp, revoke, typed-data gate) — the enforcement paths are byte-identical to the proven `0x7C91…` binary except the malleability bound.
+- **B8 (PLANNED):** relay service contract for `VITE_RELAY_URL` (currently throws `RelayNotConfiguredError`; dashboard self-relays) — or remove the relay path if self-relay stays the design.
+- **B9 (PLANNED):** submission package for the program deadline (2026-10-14 23:59 ET).

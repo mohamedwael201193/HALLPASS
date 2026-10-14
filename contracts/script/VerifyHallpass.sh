@@ -17,7 +17,8 @@
 #                             constructor args, e.g. src/HallpassPlugin.sol:HallpassProxy).
 #                             HallpassPlugin itself takes NO constructor args —
 #                             leave empty when verifying the plugin.
-#   SOURCIFY_API              Override Sourcify server base (default: https://repo.sourcify.dev/server)
+#   SOURCIFY_API              Override Sourcify server base (default: https://sourcify.dev/server;
+#                             the v2 API lives here — repo.sourcify.dev serves the UI, not /v2/*)
 #
 # On success prints the Sourcify lookup URL. On anything else it fails loudly.
 # No private key or API secret needed — verification is read-and-recompile only.
@@ -33,7 +34,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
 
 CHAIN_ID=5042
-SOURCIFY_API="${SOURCIFY_API:-https://repo.sourcify.dev/server}"
+SOURCIFY_API="${SOURCIFY_API:-https://sourcify.dev/server}"
 CONTRACT_REF="${2:-src/HallpassPlugin.sol:HallpassPlugin}"
 CONSTRUCTOR_ARGS="${CONSTRUCTOR_ARGS:-}"
 
@@ -95,22 +96,25 @@ if ! "${VERIFY_CMD[@]}"; then
 fi
 
 # ---- Confirm the match is EXACT -----------------------------------------------
-# Sourcify status must be "perfect" (= exact_match). "partial" is NOT accepted:
-# stop and fix the build config instead of proceeding (build-bible §5.2 / §12).
-echo "==> Confirming match status via Sourcify API..."
+# Sourcify v2: GET /v2/contract/{chainId}/{address} -> "match":"exact_match".
+# (API v1 was removed 2026; the old /v1/check-all-by-addresses path 404s.)
+# Anything other than exact_match is a hard stop: fix the build config
+# (solc 0.8.24, optimizer on, 200 runs, identical sources) or re-deploy —
+# do NOT proceed with an inexact match (build-bible §5.2 / §12).
+echo "==> Confirming match status via Sourcify API v2..."
 CHECK_JSON="$(
     curl -sSf --max-time 30 \
-        "${SOURCIFY_API}/v1/check-all-by-addresses?addresses=${ADDRESS}&chainIds=${CHAIN_ID}"
+        "${SOURCIFY_API}/v2/contract/${CHAIN_ID}/${ADDRESS}"
 )" || {
-    echo "ERROR: Sourcify check API unreachable." >&2
+    echo "ERROR: Sourcify v2 contract API unreachable." >&2
     exit 1
 }
 
-STATUS="$(echo "$CHECK_JSON" | grep -o '"status":"[a-z]*"' | head -1 | cut -d'"' -f4)"
-echo "    Sourcify status: ${STATUS:-unknown}"
+MATCH="$(echo "$CHECK_JSON" | grep -o '"match":"[a-z_]*"' | head -1 | cut -d'"' -f4)"
+echo "    Sourcify match: ${MATCH:-unknown}"
 
-if [[ "$STATUS" != "perfect" ]]; then
-    echo "ERROR: match is '$STATUS', not 'perfect' (exact_match)." >&2
+if [[ "$MATCH" != "exact_match" ]]; then
+    echo "ERROR: match is '$MATCH', not 'exact_match'." >&2
     echo "Per §12 definition of done this is a hard stop: fix the build" >&2
     echo "config (solc 0.8.24, optimizer on, 200 runs, identical sources) or" >&2
     echo "re-deploy — do NOT proceed with an inexact match." >&2

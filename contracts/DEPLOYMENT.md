@@ -134,12 +134,19 @@ test-evidence ledger (`PROOFS.md`).
 |---|---|---|---|---|---|
 | Arc mainnet (5042) | `0x5780e3DEd211ee13494909432C89Be7b8D6441A3` (H9 minimal-plugin research deploy; manifest `0xb058e6dc…7185a64`) | research key | bible §7 test-evidence ledger | — | exact_match |
 | Arc mainnet (5042) | `0x66A7464f091304B3619eDc163634169519E41Ce9` (H9 full-plugin research deploy; 8,206 B) | research key | `0x2628f6a6…42256108` | — | exact_match |
-| Arc mainnet (5042) | _TODO — founder production deploy_ | _TODO_ | _TODO_ | _TODO_ | _TODO_ |
+| Arc mainnet (5042) | **`0x8a81455a477deeA986ca48cE83ca89C5331Da793` — PRODUCTION** (fixed malleability constant; first deploy of the H-1-fixed binary) | `0xf76e6B0920e9332fF4410f6dD53F01722AbC71a3` | `0xf408ec17f3b9e915488fa901f190123fc56368f487ee6ee30eb80e065e86fe1c` | 25959755 | **exact_match** (creation + runtime, 2026-10-14) |
 
 > The H9 rows are the research deployments that produced the proven test
-> evidence (bible §7). `contracts/deployments/arc-5042.json` in this repo
-> currently holds a **dry-run rehearsal artifact** (`txHash: DRY_RUN_NO_TX`) —
-> it is NOT a deployment record and must be overwritten by a real
-> `scripts/deploy.sh` run. The production deploy is the founder's step —
-> fill the TODO row from the real run, then verify per §4 before announcing
-> the address.
+> evidence (bible §7). The production row is the founder-authorized deploy
+> of 2026-10-14: `scripts/deploy.sh` broadcast it, `cast code` confirms the
+> deployed bytecode carries the FIXED malleability constant
+> (`0x7FFF…B20A0`, no typo constant present), and Sourcify reports
+> `exact_match` for both creation and runtime bytecode
+> (`https://repo.sourcify.dev/5042/0x8a81455a477deeA986ca48cE83ca89C5331Da793`).
+> `contracts/deployments/arc-5042.json` holds the machine-readable record.
+>
+> **Wiring the live address:** the frontend takes it from `VITE_PLUGIN_ADDRESS`
+> (no fallback default — deliberate); the backend API takes it from the
+> `PLUGIN_ADDRESS` env var (default remains the H9 minimal-plugin deployment
+> that the existing indexer data refers to). Set both in the production
+> deployment environment.
