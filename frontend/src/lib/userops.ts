@@ -37,8 +37,8 @@ import {
 import { signMessage } from 'viem/actions';
 import {
   ENTRYPOINT_ADDRESS,
-  entryPointAbi,
-  accountAbi,
+  parsedAccountAbi,
+  parsedEntryPointAbi,
   encodePolicyInitData,
   type PolicyParams,
 } from './contracts';
@@ -82,7 +82,7 @@ export function encodeInstallPluginCalldata(
   dependencies: { plugin: Address; functionId: number }[] = [],
 ): Hex {
   return encodeFunctionData({
-    abi: accountAbi,
+    abi: parsedAccountAbi,
     functionName: 'installPlugin',
     args: [plugin, manifestHash, initData, dependencies],
   });
@@ -109,7 +109,7 @@ export async function buildInstallPluginUserOp(
 
   const nonce = (await client.readContract({
     address: entryPoint,
-    abi: entryPointAbi,
+    abi: parsedEntryPointAbi,
     functionName: 'getNonce',
     args: [args.account, 0n],
   })) as bigint;
@@ -225,7 +225,7 @@ export async function getEntryPointDeposit(
 ): Promise<bigint> {
   return (await client.readContract({
     address: entryPoint,
-    abi: entryPointAbi,
+    abi: parsedEntryPointAbi,
     functionName: 'balanceOf',
     args: [account],
   })) as bigint;
@@ -245,7 +245,7 @@ export async function topUpEntryPointDeposit(
   return walletClient.writeContract({
     account: owner,
     address: entryPoint,
-    abi: entryPointAbi,
+    abi: parsedEntryPointAbi,
     functionName: 'depositTo',
     args: [account],
     value: amountWei,
@@ -272,7 +272,7 @@ export async function submitUserOpDirect(
   return walletClient.writeContract({
     account: relayer,
     address: entryPoint,
-    abi: entryPointAbi,
+    abi: parsedEntryPointAbi,
     functionName: 'handleOps',
     args: [[userOp], relayer],
     chain: walletClient.chain,
@@ -332,7 +332,7 @@ export async function installPluginDirect(
   return walletClient.writeContract({
     account: owner,
     address: account,
-    abi: accountAbi,
+    abi: parsedAccountAbi,
     functionName: 'installPlugin',
     args: [plugin, manifestHash, initData, []],
     chain: walletClient.chain,

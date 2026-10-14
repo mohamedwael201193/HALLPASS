@@ -21,7 +21,7 @@ import {
   PLUGIN_ADDRESS,
   CONFIGURED_MANIFEST_HASH,
   ENTRYPOINT_ADDRESS,
-  pluginAbi,
+  parsedPluginAbi,
   publicClient as defaultPublicClient,
   fetchManifestHash,
   verifyPlugin,
@@ -249,7 +249,7 @@ function useHallpassLive(): UseHallpass {
         const plugin = requirePlugin();
         const p = await client.readContract({
           address: plugin,
-          abi: pluginAbi,
+          abi: parsedPluginAbi,
           functionName: 'policies',
           args: [account],
         });

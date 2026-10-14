@@ -17,6 +17,7 @@ import {
   http,
   isAddress,
   keccak256,
+  parseAbi,
   parseAbiParameters,
   toFunctionSelector,
 } from 'viem';
@@ -149,10 +150,10 @@ export const PLUGIN_MANIFEST_SELECTOR = computedSelector('pluginManifest()');
 
 /** Circle MSCA account surface the dashboard touches (bible §4.1). */
 export const accountAbi = [
-  'function installPlugin(address plugin, bytes32 manifestHash, bytes pluginInstallData, tuple(address plugin, uint8 functionId)[] dependencies)',
+  'function installPlugin(address plugin, bytes32 manifestHash, bytes pluginInstallData, (address plugin, uint8 functionId)[] dependencies)',
   'function uninstallPlugin(address plugin, bytes uninstallData, bytes dependencies)',
   'function execute(address target, uint256 value, bytes data)',
-  'function executeBatch(tuple(address target, uint256 value, bytes data)[] calls)',
+  'function executeBatch((address target, uint256 value, bytes data)[] calls)',
   'function getInstalledPlugins() view returns (address[])',
   'function initializeUpgradableMSCA(address[] plugins, bytes32[] manifestHashes, bytes[] initDatas)',
   'function isValidSignature(bytes32 digest, bytes sig) view returns (bytes4)',
@@ -185,7 +186,7 @@ export const pluginAbi = [
 /** ERC-4337 v0.7 EntryPoint surface used by the dashboard. */
 export const entryPointAbi = [
   'function getNonce(address sender, uint192 key) view returns (uint256)',
-  'function handleOps(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)',
+  'function handleOps((address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)',
   'function balanceOf(address account) view returns (uint256)',
   'function depositTo(address account) payable',
 ] as const;
@@ -196,6 +197,25 @@ export const erc20Abi = [
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Parsed ABIs — for RUNTIME viem calls ONLY.
+//
+// viem (2.57.x) does NOT resolve human-readable string ABIs inside
+// encodeFunctionData / decodeFunctionData / decodeErrorResult / readContract
+// / writeContract: getAbiItem expects parsed AbiItem objects and either
+// throws ("Cannot use 'in' operator...") or fails to match (decode falls
+// through to the 'Unknown' branch). Passing the string arrays above to any
+// of those functions is a runtime bug — the install path and the revert
+// decoder were both broken by it (caught by src/__tests__/ 2026-10-15).
+// These parsed versions are the same ABIs; use them for every runtime call.
+// The string forms above stay as the human-readable source of truth.
+// ---------------------------------------------------------------------------
+
+export const parsedAccountAbi = parseAbi(accountAbi);
+export const parsedPluginAbi = parseAbi(pluginAbi);
+export const parsedEntryPointAbi = parseAbi(entryPointAbi);
+export const parsedErc20Abi = parseAbi(erc20Abi);
 
 // ---------------------------------------------------------------------------
 // viem clients
@@ -262,7 +282,7 @@ export async function verifyPlugin(
     try {
       supportsIPlugin = (await client.readContract({
         address: plugin,
-        abi: ['function supportsInterface(bytes4) view returns (bool)'] as const,
+        abi: parseAbi(['function supportsInterface(bytes4) view returns (bool)']),
         functionName: 'supportsInterface',
         args: ['0x043140ed' as Hex],
       })) as boolean;
@@ -426,8 +446,8 @@ export interface DecodedRevert {
 
 export function decodeHallpassRevert(data: Hex): DecodedRevert {
   try {
-    const decoded = decodeErrorResult({ abi: pluginAbi, data });
-    const a = decoded.args as unknown[];
+    const decoded = decodeErrorResult({ abi: parsedPluginAbi, data });
+    const a = decoded.args as unknown as unknown[];
     switch (decoded.errorName) {
       case 'PerTxCapExceeded':
         return {
@@ -476,7 +496,7 @@ export async function getInstalledPlugins(
 ): Promise<Address[]> {
   return (await client.readContract({
     address: account,
-    abi: accountAbi,
+    abi: parsedAccountAbi,
     functionName: 'getInstalledPlugins',
   })) as Address[];
 }
@@ -503,7 +523,7 @@ export async function getTokenBalance(
 ): Promise<bigint> {
   return (await client.readContract({
     address: token,
-    abi: erc20Abi,
+    abi: parsedErc20Abi,
     functionName: 'balanceOf',
     args: [account],
   })) as bigint;
