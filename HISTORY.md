@@ -282,3 +282,77 @@ icons featured in stats strip + session cards. Mobile 390px verified.
 - Screenshots: `~/workspace/your_files/review-shots/hp-dash-v2-*-nc.png`
   (configured-but-not-connected, verified with a temporary fake project id;
   the temp `.env` was deleted afterwards and never committed).
+
+## 2026-10-15 — HALLPASS-WIN (competitor-showdown gap closure)
+
+Five parallel tracks, all merged into `win/integration`. Every tx below verified
+independently via Arc RPC (`eth_getTransactionReceipt`).
+
+### W1 — userOp-through-EntryPoint PROVEN on production v0.2.0 (biggest disclosed gap, now closed)
+- Real ERC-4337 v0.7 userOp through `EntryPoint.handleOps` against production
+  plugin `0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9` (Sourcify exact_match,
+  low-s malleability fix enforced).
+- In-policy userOp tx: `0x9b74befeb628ed742cd3348eb1bcd2b3f377cc71564cbf29c7912b17eee230f7`
+  — status 1, block 25995761, gas 212,283, fee 0.00424566 USDC.
+  userOpHash `0x68a98466ad16e7e94fc92cbd29329f44b06c614ce4764dd3be3c1c1afbd22a10`.
+  Fresh session key `0xeac43BfD2261d50cd5CCe0382a462B6834CE9332` signed (low-s);
+  account `0x72142EeA4217d835e34dF1728dAeB2aa9A4D7c07` executed 2000 EURC units
+  (0.002) to payee; plugin `userOpValidationFunction` recovered the session key,
+  enforced per-tx cap + window, emitted `SpendAuthorized(spend=0.002,
+  windowSpent=0.002)`; `windowSpent` 0 → 0.002 on-chain.
+- Over-cap userOp tx: `0x6c74adf19ec2c65d66baa9386aef9c27fc266c32b66b0cda034666ce85f430d3`
+  — status 0, block 25995885: 50,000 EURC units vs 0.01 cap reverted
+  `FailedOpWithRevert(0, "AA23 reverted", PerTxCapExceeded)`; windowSpent stayed 0.002.
+- Scripts: `scripts/win-userop-proof.js`, `scripts/win-userop-proof-f.js`.
+  PROOFS.md row 41; honesty section updated (bundler/ERC-7562 still disclosed).
+
+### W2 — isValidSignature routing verdict (discrepancy resolved honestly)
+- Mechanism PROVEN on mainnet: `updatePolicy` tx `0x0ce138523b1d077f2c173d2f5e06f040dfd68f5db261c621c28f065465a3bf9d`
+  (status 1, block 25996915) then `authorizeDigest` tx
+  `0xdb5fa1688653bd8694ef35fb95902e6c5ebd1cf8211277ceb76f559031bf73b8`
+  (status 1, block 25996927); `eth_call` direct plugin call with from=account
+  returns MAGIC `0x1626ba7e` on authorized digest + valid session-key sig,
+  `0xffffffff` on wrong sig / unauthorized digest.
+- Account routing PROVEN IMPOSSIBLE: `account.isValidSignature()` reverts
+  `0x534a471c`; `account.execute(plugin,…)` reverts `0x9ce1cc5c`. Root cause:
+  the MSCA dispatches `0x1626ba7e` through the plugin validation registry, but
+  v0.2.0's manifest lists the selector only under executionFunctions.
+- Deliverable: `PROOFS-SIG-ADDENDUM.md`. "Proven" = plugin mechanism;
+  "not live-routable" = account 1271 entrypoint. Follow-up flagged: a
+  RUNTIME_VALIDATION_ALWAYS_ALLOW association for `0x1626ba7e` would need a
+  plugin change.
+
+### W3 — frontend test gate (vitest, 76/76)
+- `npm test` green; `tsc` clean; `vite build` green. 6 files: selectors
+  (pins `executeBatch((address,uint256,bytes)[])` = `0x34fcd5be` — the
+  black-screen regression), addresses, units, encoding, userop, reverts.
+- Caught a second real bug: viem 2.57.x does not resolve human-readable string
+  ABIs at runtime — the install path threw and the revert decoder always fell
+  through to "Unknown". Fixed via `parsed*` ABI exports in `lib/contracts.ts`;
+  sibling /app files (`GetEurcPanel.tsx`, `useDashboardStats.ts`,
+  `Marketplace.tsx`) still need to switch to them.
+- One test initially failed on a leftover temp `.env.local` (deleted); 76/76 green after.
+
+### W4 — policy-hash panel
+- `PolicyHashPanel.tsx` + `PolicyPage.tsx` (new files): keccak256 commitment hash
+  computed from on-chain policy, live session rollups, CSV export from events;
+  honest empty states. tsc clean, screenshot-verified, zero JS errors.
+
+### W5 — reputation feedback loop (ERC-8004)
+- Backend watcher (`backend/reputation/watcher.js`): on `SessionRevokedEvt`
+  from v0.2.0 (≥12 confirmations, SQLite dedupe, simulation-first), posts one
+  dust `giveFeedback` per close to registry `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`.
+  Production plugin untouched.
+- Proof tx: `0x8f5f56b5e6e0a90b038533c13bb6eae9f4fb2f4feeb2ee0bf4c60379a337e287`
+  — status 1, block 25996007, gas 194,459; `giveFeedback(135, 50, 0, "score",
+  "hallpass-dust-proof", "hallpass/session-close", "", 0x0)`; read-back
+  `readFeedback`/`getSummary` confirms. Two historical closes found but
+  deliberately NOT backfilled (no HALLPASS agent ID registered yet).
+- Deliverable: `REPUTATION-PROOF.md`.
+
+### Honest gaps remaining
+- Third-party volume: no committed buyer/user yet (field-decisive, needs coordination).
+- No public ERC-4337 bundler on Arc; mempool/ERC-7562 acceptance not proven.
+- `isValidSignature` unreachable via the account's 1271 entrypoint (see W2).
+- Sibling dashboards coordinator still owns /app UI; its string-ABI call sites
+  need the `parsed*` switch (flagged, not fixed here).
