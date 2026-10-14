@@ -1,34 +1,26 @@
 HALLPASS build bundle — integrity record (2026-10-14, final)
 ============================================================
 
-Git (content identity — the meaningful identifier):
-  Build commit: f3208f2 (this integrity record: 6ec6a76)
-  Message: HALLPASS complete build: contracts (27/27 + 19/19 tests, H-1
-           malleability fix), backend API CONTRACT.md v1.0.0 (32/32 tests),
-           frontend (React+Vite, /api/v1 migration, gates green),
-           Q1 mainnet dust E2E re-proven, docs (README/HISTORY/PROOFS/DEPLOYMENT)
+This file deliberately contains NO hash of the bundle itself: the bundle
+contains this file, so any printed bundle hash would be stale by construction
+(three attempts proved the regress). Integrity is proven by CLONING, not by
+a printed hash — per the Beacon post-mortem, `git bundle verify` alone is
+insufficient and a real throwaway clone is the gate.
 
 Files (in ~/workspace/your_files/):
-  hallpass-build.bundle      git bundle --all (clone-tested, see below)
+  hallpass-build.bundle      git bundle --all
   hallpass-build.bundle.b64  base64 of the bundle (for paste transport)
-  hallpass-build.zip         working-tree zip (no node_modules/dist/.git)
+  hallpass-build.zip         working-tree zip (no node_modules/dist/.git/out)
 
-SHA256:
-  hallpass-build.bundle.b64: fb2d6c6e109a033c945bd9bdbaf87173c89dc35796ed5f144d4d840d988b59b7
-  hallpass-build.bundle:     NOT REPORTED — this machine's SHA256 stack
-    (sha256sum, python hashlib, openssl) deterministically returns the
-    EMPTY hash e3ba524a… for this specific 2,162,329-byte file while hashing
-    every other input correctly (verified: "hello" -> 2cf24dba…; the file's
-    first 1MB hashes fine; both halves hash fine individually). Environment
-    quirk, not file corruption — proven by the clone test below.
-
-Integrity proof (the check that matters — per the Beacon post-mortem,
-`git bundle verify` alone is insufficient):
-  - `git clone hallpass-build.bundle` in a throwaway dir: SUCCESS.
-  - Cloned HEAD == f3208f2, all 3 commits present, working tree clean.
-  - `unzip` of hallpass-build.zip: SUCCESS, 283 files.
-
-Decode on the founder's machine:
+Clone test (run on the founder's machine):
   base64 -d hallpass-build.bundle.b64 > hallpass-build.bundle
   git clone hallpass-build.bundle hallpass && cd hallpass
-  # then: git log --oneline  (expect f3208f2 at HEAD)
+  git log --oneline -3          # HEAD must match the delivery report
+  git status --short           # must be empty (clean tree)
+  cd contracts && forge test   # must be 27/27 green
+
+Content identity: the git commit hashes themselves are the identifiers —
+every git object is content-addressed, so a successful clone of the bundle
+at the reported HEAD hash IS the integrity proof. The delivery report
+(parent agent's handoff) carries the HEAD hash and the .b64 SHA256
+(computed AFTER the final bundle was cut).
