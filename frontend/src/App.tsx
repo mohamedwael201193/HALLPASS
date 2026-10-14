@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
 import RouteFallback from './shells/RouteFallback'
+import { RootErrorBoundary } from './shells/RootErrorBoundary'
 
 /* ------------------------------------------------------------------ */
 /* ROUTE-LEVEL CODE SPLITTING (F10/F1). Every route is a lazy chunk so */
@@ -34,9 +35,10 @@ const NotFound = lazy(() => import('./shells/NotFound'))
 
 export default function App() {
   return (
-    <MotionConfig reducedMotion="user">
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
+    <RootErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/app" element={<DashboardLayout />}>
             {/* (a) Connect — one enormous, obvious connect button (F9, B4) */}
@@ -57,5 +59,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </MotionConfig>
+    </RootErrorBoundary>
   )
 }

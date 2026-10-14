@@ -20,6 +20,7 @@ import TokenIcon, { type TokenKind } from '../../components/TokenIcon'
 import GetEurcPanel, { useTokenBalances } from '../../components/GetEurcPanel'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
+import { HallpassGate, WalletDownState } from './shared'
 
 /**
  * Marketplace — the Hallpass plugin marketplace screen.
@@ -125,7 +126,13 @@ function SkeletonCard() {
   )
 }
 
-export default function Marketplace({ accountAddress }: { accountAddress?: Address }) {
+/**
+ * Inner screen — calls useHallpass()/useWalletClient() directly, so it must
+ * only render inside the gate below. Without the wallet stack (no provider
+ * or no Reown project id) the gate renders WalletDownState instead of
+ * crashing to a black screen (fix 2026-10-14).
+ */
+function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
   const hp = useHallpass()
   const { data: walletClient } = useWalletClient()
 
@@ -708,5 +715,19 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * Gated default export — the wallet gate. useHallpass() throws when the
+ * wallet stack isn't ready (no provider yet, or no Reown project id); the
+ * boundary turns that into the honest WalletDownState instead of a crash.
+ */
+export default function Marketplace({ accountAddress }: { accountAddress?: Address }) {
+  return (
+    <HallpassGate
+      render={() => <MarketplaceLive accountAddress={accountAddress} />}
+      fallback={<WalletDownState />}
+    />
   )
 }

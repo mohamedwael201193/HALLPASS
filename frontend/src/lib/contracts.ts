@@ -86,41 +86,56 @@ export const MSCA_FACTORY_ADDRESS: Address =
   '0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a6179AdD';
 
 // ---------------------------------------------------------------------------
-// Selectors — computed via toFunctionSelector, asserted against bible values.
+// Selectors — computed via toFunctionSelector, never recalled.
+// The EXPECTED values below are asserted at BUILD time by
+// scripts/check-selectors.mjs (npm prebuild), NEVER during render: a sanity
+// check must not be able to crash the React tree (fix 2026-10-14: a stale
+// expected value for executeBatch threw at module load and black-screened
+// /app). If the build-time check fails, the build fails — loud, but safe.
 // ---------------------------------------------------------------------------
 
-function computedSelector(sig: string, expected?: Hex): Hex {
-  const sel = toFunctionSelector(sig);
-  if (expected && sel.toLowerCase() !== expected.toLowerCase()) {
-    // A selector mismatch is a ship-blocking bug, not a warning (bible rule 8).
-    throw new Error(
-      `[hallpass] selector mismatch for ${sig}: computed ${sel}, expected ${expected}`,
-    );
-  }
-  return sel;
+function computedSelector(sig: string): Hex {
+  return toFunctionSelector(sig);
 }
 
-// Account (Circle MSCA, ERC-6900 v0.7) — bible §4.1
+/**
+ * Build-time assertion targets. Keys are canonical function signatures,
+ * values are the selectors reality must produce. Checked by
+ * scripts/check-selectors.mjs before every build. DO NOT assert these at
+ * render time.
+ *
+ * executeBatch note (2026-10-14): the plugin's on-chain constant is
+ * EXECUTE_BATCH = 0x34fcd5be = executeBatch((address,uint256,bytes)[]) —
+ * the ERC-6900 IStandardExecutor struct-array form, verified against the
+ * exact_match Sourcify ABI of 0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9.
+ * The parallel-array form executeBatch(address[],uint256[],bytes[])
+ * (0x47e1da2a) is the ERC-4337 SimpleAccount convention and is NOT what
+ * the plugin validates — using it would route batches around the policy.
+ */
+export const SELECTOR_EXPECTATIONS: Record<string, Hex> = {
+  'installPlugin(address,bytes32,bytes,(address,uint8)[])': '0xf85730f4',
+  'uninstallPlugin(address,bytes,bytes)': '0xc1a221f3',
+  'execute(address,uint256,bytes)': '0xb61d27f6',
+  'executeBatch((address,uint256,bytes)[])': '0x34fcd5be',
+  'onInstall(bytes)': '0x6d61fe70',
+  'onUninstall(bytes)': '0x8a91b0e3',
+};
+
+// Account (Circle MSCA, ERC-6900 v0.7) — ERC-6900 IStandardExecutor forms
 export const INSTALL_PLUGIN_SELECTOR = computedSelector(
   'installPlugin(address,bytes32,bytes,(address,uint8)[])',
-  '0xf85730f4',
 );
 export const UNINSTALL_PLUGIN_SELECTOR = computedSelector(
   'uninstallPlugin(address,bytes,bytes)',
-  '0xc1a221f3',
 );
-export const EXECUTE_SELECTOR = computedSelector(
-  'execute(address,uint256,bytes)',
-  '0xb61d27f6',
-);
+export const EXECUTE_SELECTOR = computedSelector('execute(address,uint256,bytes)');
 export const EXECUTE_BATCH_SELECTOR = computedSelector(
-  'executeBatch(address[],uint256[],bytes[])',
-  '0x34fcd5be',
+  'executeBatch((address,uint256,bytes)[])',
 );
-// Plugin lifecycle (bible §4.1)
-export const ON_INSTALL_SELECTOR = computedSelector('onInstall(bytes)', '0x6d61fe70');
-export const ON_UNINSTALL_SELECTOR = computedSelector('onUninstall(bytes)', '0x8a91b0e3');
-// HallpassPlugin installed execution functions (no bible literals — computed only)
+// Plugin lifecycle
+export const ON_INSTALL_SELECTOR = computedSelector('onInstall(bytes)');
+export const ON_UNINSTALL_SELECTOR = computedSelector('onUninstall(bytes)');
+// HallpassPlugin installed execution functions (computed only)
 export const REVOKE_SESSION_SELECTOR = computedSelector('revokeSession()');
 export const UPDATE_POLICY_SELECTOR = computedSelector(
   'updatePolicy(address,uint256,uint256,uint256,uint256,address[],address[],uint8[])',
@@ -137,7 +152,7 @@ export const accountAbi = [
   'function installPlugin(address plugin, bytes32 manifestHash, bytes pluginInstallData, tuple(address plugin, uint8 functionId)[] dependencies)',
   'function uninstallPlugin(address plugin, bytes uninstallData, bytes dependencies)',
   'function execute(address target, uint256 value, bytes data)',
-  'function executeBatch(address[] targets, uint256[] values, bytes[] datas)',
+  'function executeBatch(tuple(address target, uint256 value, bytes data)[] calls)',
   'function getInstalledPlugins() view returns (address[])',
   'function initializeUpgradableMSCA(address[] plugins, bytes32[] manifestHashes, bytes[] initDatas)',
   'function isValidSignature(bytes32 digest, bytes sig) view returns (bytes4)',
