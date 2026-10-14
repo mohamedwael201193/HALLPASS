@@ -1,25 +1,19 @@
 /**
- * Features — every module follows the design-standard §2 7-slot skeleton:
+ * Features — every module follows the 7-slot skeleton:
  * label → contents list → asterisk fine-print → imperative how-to →
  * name heading → tagline (sentence case, ends with period) → bespoke visual.
  * The skeleton is IDENTICAL for every module; only content and the
  * hand-made SVG visual swap.
+ *
+ * Carry-exact shell; blue accents; all copy byte-identical.
  */
 
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useHidden, EASE_OUT } from "./reveal";
+import { CarrySection, SectionH2 } from "./carry/Section";
 
-const TOKENS = {
-  bg: "#121110",
-  amber: "#FFB224",
-  cream: "#FAF6EE",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.62)",
-  card: "rgba(250,246,238,0.045)",
-  border: "rgba(255,178,36,0.22)",
-  finePrint: "rgba(255,249,239,0.48)",
-};
+const BLUE = "#4da2ff";
 
 type Feature = {
   label: string;
@@ -45,7 +39,7 @@ function Glyph({ children }: { children: ReactNode }) {
   );
 }
 
-const A = TOKENS.amber;
+const A = BLUE;
 
 const FEATURES: Feature[] = [
   {
@@ -162,45 +156,32 @@ function Module({ f, index }: { f: Feature; index: number }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.7, ease: EASE_OUT, delay: (index % 3) * 0.06 }}
-      style={{
-        background: TOKENS.card,
-        border: `1px solid ${TOKENS.border}`,
-        borderRadius: 14,
-        padding: 26,
-      }}
+      className="border border-dashed border-white/20 bg-white/[0.02] p-6"
     >
       {/* 1 — label */}
-      <p
-        style={{
-          fontSize: 12,
-          letterSpacing: "0.2em",
-          color: TOKENS.amber,
-          fontWeight: 700,
-          margin: "0 0 14px",
-        }}
-      >
+      <p className="mb-3.5 text-xs font-bold tracking-[0.2em] text-[#4da2ff]">
         {f.label}
       </p>
       {/* 2 — contents list */}
-      <ul style={{ margin: "0 0 10px", padding: "0 0 0 18px", color: TOKENS.muted, fontSize: 15, lineHeight: 1.7 }}>
+      <ul className="mb-2.5 list-none p-0 text-[15px] font-light leading-[1.7] text-gray-400">
         {f.contents.map((c) => (
-          <li key={c}>{c}</li>
+          <li key={c} className="pl-0 before:mr-2 before:text-[#4da2ff] before:content-['–']">{c}</li>
         ))}
       </ul>
       {/* 3 — asterisk fine print */}
-      <p style={{ fontSize: 13, color: TOKENS.finePrint, margin: "0 0 16px" }}>
+      <p className="mb-4 text-[13px] font-light text-gray-400/70">
         {f.asterisk}
       </p>
       {/* 4 — imperative how-to */}
-      <p style={{ fontSize: 15, lineHeight: 1.6, color: TOKENS.textDark, margin: "0 0 18px" }}>
+      <p className="mb-4 text-[15px] font-light leading-[1.6] text-white">
         {f.howTo}
       </p>
       {/* 5 — name heading */}
-      <h3 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>
+      <h3 className="mb-1.5 text-[22px] font-normal text-white">
         {f.name}
       </h3>
       {/* 6 — tagline, sentence case, ends with period */}
-      <p style={{ fontSize: 15.5, color: TOKENS.muted, margin: 0, lineHeight: 1.55 }}>
+      <p className="m-0 text-[15.5px] font-light leading-[1.55] text-gray-400">
         {f.tagline}
       </p>
       {/* 7 — bespoke visual */}
@@ -211,45 +192,15 @@ function Module({ f, index }: { f: Feature; index: number }) {
 
 export default function Features() {
   return (
-    <section
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
-    >
-      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <p
-          style={{
-            color: TOKENS.amber,
-            letterSpacing: "0.22em",
-            textTransform: "uppercase",
-            fontSize: 13,
-            fontWeight: 700,
-            margin: "0 0 16px",
-          }}
-        >
-          What the pass controls
-        </p>
-        <h2
-          style={{
-            fontSize: "clamp(30px, 4.5vw, 48px)",
-            lineHeight: 1.15,
-            letterSpacing: "-0.01em",
-            margin: "0 0 48px",
-            fontWeight: 800,
-          }}
-        >
-          Every bound, enforced on-chain.
-        </h2>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-            gap: 16,
-          }}
-        >
-          {FEATURES.map((f, i) => (
-            <Module key={f.name} f={f} index={i} />
-          ))}
-        </div>
+    <CarrySection number="05" label="What the pass controls">
+      <SectionH2>
+        Every bound, <span className="text-white/50">enforced on-chain.</span>
+      </SectionH2>
+      <div className="mt-14 grid gap-4 md:mt-20 md:grid-cols-2 lg:grid-cols-3">
+        {FEATURES.map((f, i) => (
+          <Module key={f.name} f={f} index={i} />
+        ))}
       </div>
-    </section>
+    </CarrySection>
   );
 }

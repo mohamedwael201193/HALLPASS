@@ -1,19 +1,13 @@
 /**
  * Faq — six real questions, honest answers. No hand-waving; where the
  * answer is "not yet", we say so.
+ *
+ * Carry-exact shell; blue accents; all copy byte-identical.
  */
 
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
-
-const TOKENS = {
-  bg: "#121110",
-  amber: "#FFB224",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.62)",
-  border: "rgba(255,178,36,0.22)",
-  card: "rgba(250,246,238,0.045)",
-};
+import { CarrySection, SectionH2 } from "./carry/Section";
 
 const FAQS = [
   {
@@ -45,13 +39,10 @@ const FAQS = [
 export default function Faq() {
   const hidden = useHidden(36);
   return (
-    <section
-      id="faq"
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
-    >
+    <CarrySection id="faq" number="07" label="FAQ">
       <style>{`
         .faq-item { transition: border-color 0.25s ease; }
-        .faq-item:hover { border-color: rgba(255,178,36,0.45); }
+        .faq-item:hover { border-color: rgba(77,162,255,0.45); }
         .faq-item summary { position: relative; padding-right: 36px; }
         .faq-item summary::-webkit-details-marker { display: none; }
         .faq-item summary::marker { content: ""; }
@@ -59,80 +50,40 @@ export default function Faq() {
           content: "+";
           position: absolute; right: 6px; top: 50%;
           transform: translateY(-50%);
-          color: #FFB224; font-size: 22px; font-weight: 700; line-height: 1;
+          color: #4da2ff; font-size: 22px; font-weight: 700; line-height: 1;
         }
         .faq-item[open] summary::after { content: "\\2013"; }
         @media (prefers-reduced-motion: reduce) {
           .faq-item { transition: none; }
         }
       `}</style>
-      <div style={{ maxWidth: 800, margin: "0 auto" }}>
-        <p
-          style={{
-            color: TOKENS.amber,
-            letterSpacing: "0.22em",
-            textTransform: "uppercase",
-            fontSize: 13,
-            fontWeight: 700,
-            margin: "0 0 16px",
-          }}
-        >
-          FAQ
-        </p>
-        <h2
-          style={{
-            fontSize: "clamp(30px, 4.5vw, 48px)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.02em",
-            margin: "0 0 40px",
-            fontWeight: 800,
-          }}
-        >
-          Real answers.
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="mx-auto max-w-3xl">
+        <SectionH2>
+          Real <span className="text-white/50">answers.</span>
+        </SectionH2>
+        <div className="mt-10 flex flex-col gap-3">
           {FAQS.map((f, i) => (
             <motion.details
               key={f.q}
-              className="faq-item"
+              className="faq-item border border-dashed border-white/20 bg-white/[0.02] px-5 py-4"
               initial={hidden}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-40px" }}
               transition={{ duration: 0.6, ease: EASE_OUT, delay: Math.min(i * 0.05, 0.2) }}
-              style={{
-                background: TOKENS.card,
-                border: `1px solid ${TOKENS.border}`,
-                borderRadius: 12,
-                padding: "18px 22px",
-              }}
             >
-              <summary
-                style={{
-                  fontWeight: 700,
-                  fontSize: 17,
-                  cursor: "pointer",
-                  listStyle: "none",
-                }}
-              >
+              <summary className="min-h-[44px] cursor-pointer list-none text-[17px] font-bold text-white">
                 {f.q}
               </summary>
-              <p
-                style={{
-                  color: TOKENS.muted,
-                  fontSize: 15.5,
-                  lineHeight: 1.65,
-                  margin: "12px 0 0",
-                }}
-              >
+              <p className="mb-0 mt-3 text-[15.5px] font-light leading-[1.65] text-gray-400">
                 {f.a}
               </p>
             </motion.details>
           ))}
         </div>
-        <p style={{ fontSize: 13, color: TOKENS.muted, margin: "20px 0 0" }}>
+        <p className="mt-5 text-[13px] font-light text-gray-400">
           *policy binds account execution and 4337 validation; mempool/bundler acceptance is not yet proven — disclosed in the build bible §6. gas figures are measured mainnet values, not estimates.
         </p>
       </div>
-    </section>
+    </CarrySection>
   );
 }

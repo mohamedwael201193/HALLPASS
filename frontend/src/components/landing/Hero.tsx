@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { motion, MotionConfig } from "framer-motion";
-import Logo from "./Logo";
-import DotMatrix from "./hero/DotMatrix";
-import "./hero/dotmatrix-motion.css";
+import { motion, MotionConfig, useReducedMotion } from "framer-motion";
+import TagMark from "./Logo";
+import { GradientCta } from "./carry/Section";
+import { Beams } from "../../vendor/reactbits/Beams/Beams";
+import DotGrid from "../../vendor/reactbits/DotGrid/DotGrid";
 
 type Stats = {
   accounts: number;
@@ -55,76 +56,101 @@ const rise = (delay: number) => ({
 });
 
 /**
- * Hero (rebuild 2026-10-14 — founder order: rebuild in the SPIRIT of
- * usecarry.xyz, adapted to HALLPASS, never a copy).
+ * Hero — carry-exact (2026-10-15, usecarry.xyz visual spec).
  *
- * CARRY's grammar, our voice: deep warm-black field, a fine dotted
- * dot-matrix particle field, one soft shaft of AMBER light pouring from
- * the top-center, a huge calm centered headline in sentence case, muted
- * gray subcopy, two CTAs (filled gradient + outlined), and a tiny
- * letterspaced microcopy line beneath.
+ * Background: DotGrid (dots tinted #4da2ff at low opacity, radial edge fade)
+ * + Beams (color '#4da2ff', restrained speed) as the top-center light beam.
+ * Both are dependency-free WebGL; paused={true} under reduced motion.
  *
- * Palette: #121110 bg, #FFB224 amber, #FAF6EE cream. Headline set in
- * Inter semibold with tight tracking — confident and calm, never loud.
- * Entrance motion is opacity + translateY ≤0.8s, reduced-motion safe.
+ * Typography: Satoshi 400 H1 (text-5xl → md:text-6xl → lg:text-[4.5rem],
+ * leading 1.05, tracking-tight, white, explicit two-line break), Satoshi 300
+ * text-xl gray-400 subcopy. CTA row: gradient-border primary + outline
+ * secondary. Microcopy in Geist Mono. No blur() anywhere.
  */
 export default function Hero() {
   const stats = useLiveStats();
+  const reduceMotion = useReducedMotion();
 
   return (
     <MotionConfig reducedMotion="user">
       <section
         id="top"
-        className="relative overflow-hidden bg-[#121110] text-[#FAF6EE]"
+        className="relative mx-auto w-full max-w-7xl overflow-hidden border-x border-dashed border-white/20 px-6 pb-24 pt-16 text-center md:pb-32 md:pt-32"
       >
-        {/* living background: dot matrix + amber beam + rising motes */}
-        <DotMatrix />
+        {/* living background: blue dot field + top-center light beam */}
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <DotGrid
+            className="absolute inset-0"
+            dotSize={4}
+            gap={20}
+            baseColor="#16233f"
+            activeColor="#4da2ff"
+            fade={0.9}
+            opacity={0.55}
+            mouseInteraction={false}
+            clickShock={false}
+            intro={!reduceMotion}
+            paused={reduceMotion ?? false}
+          />
+          <div className="carry-beam-mask absolute inset-x-0 top-0 h-[560px]">
+            <Beams
+              color="#4da2ff"
+              beamWidth={120}
+              speed={0.4}
+              brightness={1.2}
+              glow={0.5}
+              fillLight={0.25}
+              opacity={0.7}
+              fade={0.5}
+              mouseInteraction={false}
+              intro={!reduceMotion}
+              paused={reduceMotion ?? false}
+            />
+          </div>
+        </div>
 
-        {/* ---- content: centered, minimal, generous whitespace ---- */}
-        <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-4xl flex-col items-center justify-center px-6 pb-24 pt-36 text-center">
+        {/* ---- content: centered, minimal ---- */}
+        <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center">
           {/* eyebrow */}
-          <motion.div {...rise(0)} className="flex items-center gap-3">
-            <Logo size={22} />
-            <span className="text-[12px] font-bold uppercase tracking-[0.4em] text-[#FAF6EE]/60">
-              Hall&nbsp;Pass&nbsp;&nbsp;·&nbsp;&nbsp;ERC-6900 policy plugins
+          <motion.div
+            {...rise(0)}
+            className="mb-6 flex items-center gap-3"
+          >
+            <TagMark size={16} />
+            <span className="text-[11px] tracking-[0.3em] text-white/50">
+              HALL&nbsp;PASS&nbsp;·&nbsp;ERC-6900&nbsp;POLICY&nbsp;PLUGINS
             </span>
           </motion.div>
 
-          {/* headline — calm, centered, sentence case */}
+          {/* headline — calm, centered, Satoshi 400, explicit two-line break */}
           <motion.h1
             {...rise(0.12)}
-            className="mt-8 max-w-[20ch] text-[clamp(2.6rem,5.6vw,5rem)] font-semibold leading-[1.04] tracking-[-0.02em] text-[#FAF6EE]"
+            className="mb-6 text-5xl font-normal leading-[1.05] tracking-tight text-white md:text-6xl lg:text-[4.5rem]"
           >
-            Give your agent a{" "}
-            <span className="text-[#FFB224]">hall&nbsp;pass</span>,
-            <br />
-            not your keys.
+            Give your agent a{" "}<br className="hidden md:block" />
+            <span className="text-[#4da2ff]">hall&nbsp;pass,</span> not your
+            keys.
           </motion.h1>
 
-          {/* subcopy — muted gray */}
+          {/* subcopy — Satoshi 300, text-xl, gray-400 */}
           <motion.p
             {...rise(0.26)}
-            className="mt-7 max-w-[52ch] text-base leading-[1.7] text-[#FAF6EE]/55 md:text-lg"
+            className="mx-auto mb-10 max-w-2xl text-xl font-light leading-relaxed text-gray-400"
           >
             Session-key plugins for agent smart wallets. Set the bounds —
             spend caps, allowed targets, expiry — and everything outside them
             reverts on-chain. Revoke anytime.
           </motion.p>
 
-          {/* CTAs */}
+          {/* CTA row */}
           <motion.div
             {...rise(0.4)}
-            className="mt-11 flex w-full flex-col items-center gap-4 sm:w-auto sm:flex-row"
+            className="flex flex-col items-center gap-6 sm:flex-row"
           >
-            <a
-              href="/app"
-              className="inline-flex min-h-[52px] w-full items-center justify-center rounded-md bg-gradient-to-b from-[#FFC95C] to-[#FFB224] px-9 text-[15px] font-bold tracking-wide text-[#121110] shadow-[0_0_0_1px_rgba(255,178,36,0.55),0_8px_32px_-8px_rgba(255,178,36,0.45)] transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98] sm:w-auto"
-            >
-              Install the plugin
-            </a>
+            <GradientCta href="/app">Install the plugin</GradientCta>
             <a
               href="#live-proof"
-              className="inline-flex min-h-[52px] w-full items-center justify-center rounded-md border border-[#FAF6EE]/25 px-9 text-[15px] font-semibold tracking-wide text-[#FAF6EE]/85 transition-colors hover:border-[#FFB224]/70 hover:text-[#FFB224] sm:w-auto"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-none border border-white/20 bg-white/5 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-colors hover:bg-white/15"
             >
               See live proof
             </a>
@@ -133,7 +159,7 @@ export default function Hero() {
           {/* microcopy */}
           <motion.p
             {...rise(0.52)}
-            className="mt-9 text-[11px] font-medium uppercase tracking-[0.32em] text-[#FAF6EE]/35"
+            className="font-geist mt-10 text-[10px] uppercase tracking-[0.25em] text-white/60"
           >
             Proven on Arc mainnet&nbsp;&nbsp;·&nbsp;&nbsp;Revocable
             anytime&nbsp;&nbsp;·&nbsp;&nbsp;No custody
@@ -145,7 +171,7 @@ export default function Hero() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.6, delay: 0.65 }}
-              className="mt-16 grid w-full max-w-2xl grid-cols-3 gap-6 border-t border-[#FAF6EE]/10 pt-8 text-center"
+              className="mt-14 grid w-full max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8 text-center"
               aria-live="polite"
             >
               {(
@@ -156,10 +182,10 @@ export default function Hero() {
                 ] as const
               ).map((s) => (
                 <div key={s.label}>
-                  <div className="text-3xl font-semibold tabular-nums text-[#FAF6EE] md:text-4xl">
+                  <div className="text-3xl font-normal tabular-nums text-white md:text-4xl">
                     {s.value.toLocaleString()}
                   </div>
-                  <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[#FAF6EE]/40">
+                  <div className="font-geist mt-2 text-[10px] uppercase tracking-[0.2em] text-white/40">
                     {s.label}
                   </div>
                 </div>

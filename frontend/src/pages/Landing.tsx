@@ -5,8 +5,12 @@
  *
  * Sections owned elsewhere are imported cleanly as defaults; they are
  * expected at ../components/landing/<Name>.tsx.
+ *
+ * Carry-exact (2026-10-15): sections carry their own dashed border-top
+ * dividers per the carry grammar — no separate divider components.
  */
 
+import "../components/landing/carry/carry.css";
 import Nav from "../components/landing/Nav";
 import Hero from "../components/landing/Hero";
 import Problem from "../components/landing/Problem";
@@ -20,22 +24,12 @@ import Faq from "../components/landing/Faq";
 import Cta from "../components/landing/Cta";
 import Footer from "../components/landing/Footer";
 
-/** A calm hairline between dark sections — amber, barely there. */
-function SectionDivider() {
-  return (
-    <div aria-hidden className="bg-[#121110]">
-      <div className="mx-auto max-w-6xl px-6 md:px-10">
-        <div className="h-px bg-[#FFB224]/10" />
-      </div>
-    </div>
-  );
-}
-
 export default function Landing() {
   return (
     <main
+      className="carry-landing"
       style={{
-        background: "#121110",
+        background: "#050505",
         minHeight: "100vh",
       }}
     >
@@ -45,18 +39,12 @@ export default function Landing() {
       <Nav />
       <Hero />
       <Problem />
-      <SectionDivider />
       <Metaphor />
-      <SectionDivider />
       <HowItWorks />
-      <SectionDivider />
       <LiveProof />
       <VibeBreak />
-      <SectionDivider />
       <Features />
-      <SectionDivider />
       <Builders />
-      <SectionDivider />
       <Faq />
       <Cta />
       <Footer />

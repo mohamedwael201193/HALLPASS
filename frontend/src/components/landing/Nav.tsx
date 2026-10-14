@@ -1,7 +1,13 @@
-import Logo from "./Logo";
+import TagMark from "./Logo";
+import { GradientCta } from "./carry/Section";
 
 /**
- * Minimal fixed nav: logo left, text links, ONE CTA.
+ * Nav — carry-exact grammar.
+ * Wrapper: max-w-7xl border-x border-dashed border-white/20, pt-6.
+ * Bar: flex h-14 items-center justify-between px-6.
+ * Left: tag mark + "HALL PASS" (Satoshi text-2xl font-light tracking-[0.14em]).
+ * Center (md+): gap-8 text-sm font-medium text-gray-400 hover:text-white.
+ * Right: small gradient "Launch app" → /app.
  * Wallet connect lives inside /app (the real Reown flow) — no fake connect here.
  */
 export default function Nav() {
@@ -13,12 +19,12 @@ export default function Nav() {
   ];
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 bg-[#121110]/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
-        <a href="#top" className="flex items-center gap-3" aria-label="Hall Pass home">
-          <Logo size={34} />
-          <span className="text-xl font-extrabold uppercase tracking-tight text-[#FFF9EF]">
-            Hall&nbsp;Pass
+    <div className="mx-auto w-full max-w-7xl border-x border-dashed border-white/20 pt-6">
+      <div className="flex h-14 items-center justify-between px-6">
+        <a href="#top" className="flex min-h-[44px] items-center gap-3" aria-label="Hall Pass home">
+          <TagMark size={30} />
+          <span className="text-2xl font-light tracking-[0.14em] text-white">
+            HALL&nbsp;PASS
           </span>
         </a>
 
@@ -27,20 +33,19 @@ export default function Nav() {
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium text-[#FFF9EF]/70 transition-colors hover:text-[#FFB224]"
+              className="text-sm font-medium text-gray-400 transition-colors hover:text-white"
             >
               {l.label}
             </a>
           ))}
         </nav>
 
-        <a
-          href="/app"
-          className="rounded-full bg-[#FFB224] px-6 py-3 text-sm font-bold text-[#121110] transition-colors hover:bg-[#e6a41f] active:bg-[#d6951a]"
-        >
-          Launch app
-        </a>
+        <div className="flex items-center gap-4">
+          <GradientCta href="/app" small>
+            Launch app
+          </GradientCta>
+        </div>
       </div>
-    </header>
+    </div>
   );
 }

@@ -1,103 +1,41 @@
 /**
- * Cta — the final ask. Amber band, confident but restrained.
- *
- * Design-standard §6: the page's single primary CTA belongs to the hero,
- * so this band uses ghost/outline buttons only — no competing primary.
+ * Cta — the final ask, carry-exact.
+ * Dark section shell; headline in Satoshi 400; the single gradient-border
+ * primary CTA + outline ghost. All copy byte-identical.
  */
 
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
-
-const TOKENS = {
-  amber: "#FFB224",
-};
+import { GradientCta } from "./carry/Section";
 
 export default function Cta() {
   const hidden = useHidden(48);
   return (
-    <section
-      style={{
-        background: TOKENS.amber,
-        color: "#121110",
-        padding: "clamp(72px, 8vw, 96px) 24px",
-        textAlign: "center",
-      }}
-    >
+    <section className="relative mx-auto w-full max-w-7xl border-x border-t border-dashed border-white/20 bg-[#050505] px-6 py-20 text-center md:py-28">
       <style>{`
-        .cta-btn { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
-        .cta-btn-solid:hover { background: #121110 !important; color: #FFB224 !important; }
-        .cta-btn-ghost:hover { border-color: #121110 !important; background: rgba(18,17,16,0.08); }
+        .cta-ghost { transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease; }
+        .cta-ghost:hover { border-color: #4da2ff !important; background: rgba(77,162,255,0.08) !important; color: #4da2ff !important; }
       `}</style>
       <motion.div
         initial={hidden}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.7, ease: EASE_OUT }}
-        style={{ maxWidth: 820, margin: "0 auto" }}
+        className="mx-auto max-w-3xl"
       >
-        <h2
-          style={{
-            fontSize: "clamp(28px, 4.5vw, 48px)",
-            lineHeight: 1.18,
-            letterSpacing: "-0.01em",
-            fontWeight: 800,
-            margin: "0 0 16px",
-          }}
-        >
+        <h2 className="text-4xl font-normal leading-[1.18] tracking-tight text-white md:text-6xl">
           Your agent goes to work tomorrow. Give it a hall pass — not your keys.
         </h2>
-        <p
-          style={{
-            fontSize: 17,
-            lineHeight: 1.6,
-            maxWidth: 620,
-            margin: "0 auto 36px",
-            color: "rgba(18,17,16,0.72)",
-          }}
-        >
+        <p className="mx-auto mb-10 mt-6 max-w-xl text-[17px] font-light leading-[1.6] text-gray-400">
           Install the plugin, set the bounds, hand your agent the session key.
           Every spend inside the policy goes through; everything else reverts
           on-chain. Verify the whole flow yourself first.
         </p>
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            justifyContent: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <a
-            href="#live-proof"
-            className="cta-btn cta-btn-solid"
-            style={{
-              display: "inline-block",
-              background: "transparent",
-              color: "#121110",
-              fontWeight: 700,
-              fontSize: 16,
-              padding: "15px 32px",
-              borderRadius: 12,
-              textDecoration: "none",
-              border: "2px solid #121110",
-            }}
-          >
-            Verify the live proof
-          </a>
+        <div className="flex flex-col items-center justify-center gap-6 sm:flex-row">
+          <GradientCta href="#live-proof">Verify the live proof</GradientCta>
           <a
             href="#faq"
-            className="cta-btn cta-btn-ghost"
-            style={{
-              display: "inline-block",
-              background: "transparent",
-              color: "#121110",
-              fontWeight: 700,
-              fontSize: 16,
-              padding: "15px 32px",
-              borderRadius: 12,
-              textDecoration: "none",
-              border: "2px solid rgba(18,17,16,0.45)",
-            }}
+            className="cta-ghost inline-flex min-h-[44px] items-center justify-center rounded-none border border-white/20 bg-white/5 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white no-underline"
           >
             Read the FAQ
           </a>
