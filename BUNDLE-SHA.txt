@@ -1,0 +1,1 @@
+f6a3c655db5fdce8bcd72407b977af327981d54d3f45049ccf47d688f9eff1f8  /home/hatch/workspace/your_files/hallpass-build.bundle

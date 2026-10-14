@@ -48,11 +48,13 @@ contract HallpassForkTest is Test {
     address internal constant ARC_USDC =
         0x3600000000000000000000000000000000000000; // ERC-20, 6 decimals
 
-    // Live H9-proven deployments (§6) used as fork-state fixtures:
+    // NOTE: the build bible (§6.2 D1) prints this address with two hex digits
+    // dropped ("...68d52..." instead of "...68d58d52..."). The value above is
+    // the chain-verified contractAddress from the deploy tx receipt.
     address internal constant LIVE_ACCOUNT_W1B2 =
         0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a; // MSCA with full HallpassPlugin at creation
     address internal constant LIVE_PLUGIN_W1B2 =
-        0x7C912e73f9b8B60e4c68d52DeC5524e17ABDd; // full HallpassPlugin (W1B2)
+        0x7C912e73f9b8B60e4c68d58d52DeC5524e17ABDd; // full HallpassPlugin (W1B2)
     address internal constant ACCOUNT_A =
         0xF0d611Db9B94C863283E991E055b1F0a17bdFE31; // control: MSCA with NO plugins (SigGate probe)
     address internal constant ACCOUNT_B =

@@ -5,21 +5,28 @@
 // start block and writes them to SQLite. No private keys, no signing —
 // read-only RPC access only.
 //
-// Event → table mapping:
-//   SessionRegistered(account, sessionKey, perTxCap, windowCap, expiry)
-//       → plugin_installs
-//   PolicyUpdated(account, perTxCap, windowCap, expiry)
-//       → policy_updates   (session_key may be NULL if the deployed event
-//                            signature does not carry it — see README)
-//   SessionRevokedEvt(account, sessionKey)
-//       → revokes
-//   SpendAuthorized(account, sessionKey, to, amount, windowSpent)
-//       → validation_results (allowed = 1; denial rows are added by the
-//          relay integration, never fabricated here)
+// Schema contract (shared with the stats API — see backend/api/STATS.md):
+//   meta(key, value)                    — sync watermark, e.g. ('last_block','123')
+//   installs(account, plugin, tx_hash PK, block_number, block_ts, manifest_hash, uninstalled)
+//                                       — event-sourced: one row per install
+//   policies(account PK, session_key, per_tx_cap, window_cap, window_secs,
+//            window_start, window_spent, expiry, revoked, policy_hash, updated_at)
+//                                       — derived current-state, upserted from
+//                                         SessionRegistered/PolicyUpdated/SpendAuthorized
+//   spends(id, account, session_key, recipient, amount, tx_hash, block_number, block_ts)
+//                                       — one row per SpendAuthorized
+//   denials(id, account, session_key, recipient, amount, reason, source, tx_hash,
+//           block_number, block_ts)     — RELAY-FED ONLY. Reverts emit no logs;
+//                                         this indexer never writes denial rows.
+//   revokes(account, session_key, tx_hash PK, block_number, block_ts)
+//
+// Every row is traceable to a real RPC log. Fields the events do not carry
+// (manifest_hash, window_secs, window_start, policy_hash) are stored NULL
+// rather than guessed — see README. uninstalled is derived from a real
+// getInstalledPlugins() call, not assumed.
 //
 // Reorg safety: logs are only committed once their block is >= 12 blocks
-// behind chain head. The highest committed block is checkpointed in the
-// `indexer_state` table, so restarts never re-scan committed history.
+// behind chain head. The highest committed block is checkpointed in meta.
 //
 // If the plugin is not deployed yet (PLUGIN_ADDRESS unset, or the address
 // has no logs in the scan range) the indexer reports that honestly and
@@ -52,16 +59,20 @@ if (!ethers.isAddress(PLUGIN_ADDRESS)) {
   console.error(`FATAL: PLUGIN_ADDRESS="${PLUGIN_ADDRESS}" is not a valid address.`);
   process.exit(2);
 }
+const PLUGIN_ADDRESS_CHECKSUMMED = ethers.getAddress(PLUGIN_ADDRESS);
 
 const START_BLOCK = process.env.START_BLOCK
   ? BigInt(process.env.START_BLOCK)
   : null; // null → start at current head (forward-only) on first run
-const CONFIRMATIONS = 12n; // reorg-safe depth, per spec
+const CONFIRMATIONS = 12n; // reorg-safe depth
 const RANGE_SIZE = process.env.RANGE_SIZE ? BigInt(process.env.RANGE_SIZE) : 5000n;
 const POLL_INTERVAL_MS = process.env.POLL_INTERVAL_MS
   ? Number(process.env.POLL_INTERVAL_MS)
   : 0; // 0 → single pass then exit
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "db.sqlite");
+const DB_PATH =
+  process.env.INDEXER_DB ||
+  process.env.DB_PATH ||
+  path.join(__dirname, "db.sqlite");
 const MAX_RPC_RETRIES = 6;
 
 // ---------- event ABI ----------
@@ -76,77 +87,108 @@ const PLUGIN_ABI = [
 ];
 const iface = new ethers.Interface(PLUGIN_ABI);
 
+// Selectors for best-effort auxiliary reads.
+const INSTALL_PLUGIN_SEL = ethers.id("installPlugin(address,bytes32,bytes,(address,uint8)[])").slice(0, 10);
+const GET_INSTALLED_PLUGINS_SEL = ethers.id("getInstalledPlugins()").slice(0, 10);
+const accountABI = ["function getInstalledPlugins() view returns (address[])"];
+const accountIface = new ethers.Interface(accountABI);
+
 // ---------- sqlite ----------
 const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.exec(`
-  CREATE TABLE IF NOT EXISTS plugin_installs (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    account TEXT NOT NULL,
-    plugin  TEXT NOT NULL,
-    block   INTEGER NOT NULL,
-    tx      TEXT NOT NULL,
-    UNIQUE (tx, block, account)
-  );
-  CREATE TABLE IF NOT EXISTS policy_updates (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_key TEXT,                      -- NULL when the emitted event does not carry it
-    account     TEXT NOT NULL,
-    cap         TEXT NOT NULL,             -- per-tx cap, native wei, as decimal string
-    window_cap  TEXT NOT NULL,             -- rolling-window cap, native wei
-    expiry      INTEGER NOT NULL,          -- unix seconds
-    destinations TEXT NOT NULL DEFAULT '[]', -- allowlist snapshot as JSON; '[]' = open when the event carries none
-    block       INTEGER NOT NULL,
-    tx          TEXT NOT NULL,
-    UNIQUE (tx, block, account)
-  );
-  CREATE TABLE IF NOT EXISTS revokes (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_key TEXT,
-    account     TEXT NOT NULL,
-    block       INTEGER NOT NULL,
-    tx          TEXT NOT NULL,
-    UNIQUE (tx, block, account)
-  );
-  CREATE TABLE IF NOT EXISTS validation_results (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    tx      TEXT NOT NULL,
-    allowed INTEGER NOT NULL,              -- 1 = SpendAuthorized seen; 0 = denial observed (relay-fed only)
-    reason  TEXT,                          -- decoded revert reason when known
-    account TEXT,
-    session_key TEXT,
-    to_addr TEXT,
-    amount  TEXT,                          -- native wei, decimal string
-    block   INTEGER,
-    UNIQUE (tx, block)
-  );
-  CREATE TABLE IF NOT EXISTS indexer_state (
+  CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS installs (
+    account      TEXT NOT NULL,
+    plugin       TEXT NOT NULL,
+    tx_hash      TEXT PRIMARY KEY,
+    block_number INTEGER NOT NULL,
+    block_ts     INTEGER,
+    manifest_hash TEXT,            -- NULL when not recoverable from the install tx
+    uninstalled  INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS policies (
+    account      TEXT PRIMARY KEY,
+    session_key  TEXT,
+    per_tx_cap   TEXT,
+    window_cap   TEXT,
+    window_secs  INTEGER,          -- NULL: not carried by the emitted events
+    window_start INTEGER,          -- NULL: not carried by the emitted events
+    window_spent TEXT,             -- latest SpendAuthorized windowSpent per account
+    expiry       INTEGER,
+    revoked      INTEGER NOT NULL DEFAULT 0,
+    policy_hash  TEXT,             -- NULL: not carried by the emitted events
+    updated_at   INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS spends (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account      TEXT,
+    session_key  TEXT,
+    recipient    TEXT,
+    amount       TEXT,             -- native wei, decimal string
+    tx_hash      TEXT,
+    block_number INTEGER,
+    block_ts     INTEGER,
+    UNIQUE (tx_hash, block_number, account, recipient, amount)
+  );
+  CREATE TABLE IF NOT EXISTS denials (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account      TEXT,
+    session_key  TEXT,
+    recipient    TEXT,
+    amount       TEXT,
+    reason       TEXT,             -- decoded custom error, e.g. PerTxCapExceeded
+    source       TEXT,             -- 'observed-revert' | 'userop-failure'
+    tx_hash      TEXT,
+    block_number INTEGER,
+    block_ts     INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS revokes (
+    account      TEXT NOT NULL,
+    session_key  TEXT,
+    tx_hash      TEXT PRIMARY KEY,
+    block_number INTEGER NOT NULL,
+    block_ts     INTEGER
+  );
 `);
 const getState = (k) => {
-  const row = db.prepare("SELECT value FROM indexer_state WHERE key = ?").get(k);
+  const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(k);
   return row ? row.value : null;
 };
 const setState = (k, v) =>
-  db.prepare("INSERT INTO indexer_state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, v);
+  db.prepare("INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, v);
 
 const insertInstall = db.prepare(
-  "INSERT OR IGNORE INTO plugin_installs(account, plugin, block, tx) VALUES (?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO installs(account, plugin, tx_hash, block_number, block_ts, manifest_hash) VALUES (?, ?, ?, ?, ?, ?)"
 );
-const insertPolicy = db.prepare(
-  "INSERT OR IGNORE INTO policy_updates(session_key, account, cap, window_cap, expiry, destinations, block, tx) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+const upsertPolicy = db.prepare(
+  `INSERT INTO policies(account, session_key, per_tx_cap, window_cap, expiry, revoked, updated_at)
+   VALUES (?, ?, ?, ?, ?, 0, ?)
+   ON CONFLICT(account) DO UPDATE SET
+     session_key = excluded.session_key,
+     per_tx_cap = excluded.per_tx_cap,
+     window_cap = excluded.window_cap,
+     expiry = excluded.expiry,
+     revoked = excluded.revoked,
+     updated_at = excluded.updated_at`
+);
+const markRevoked = db.prepare("UPDATE policies SET revoked = 1, updated_at = ? WHERE account = ?");
+const setWindowSpent = db.prepare("UPDATE policies SET window_spent = ?, updated_at = ? WHERE account = ?");
+const insertSpend = db.prepare(
+  "INSERT OR IGNORE INTO spends(account, session_key, recipient, amount, tx_hash, block_number, block_ts) VALUES (?, ?, ?, ?, ?, ?, ?)"
 );
 const insertRevoke = db.prepare(
-  "INSERT OR IGNORE INTO revokes(session_key, account, block, tx) VALUES (?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO revokes(account, session_key, tx_hash, block_number, block_ts) VALUES (?, ?, ?, ?, ?)"
 );
-const insertValidation = db.prepare(
-  "INSERT OR IGNORE INTO validation_results(tx, allowed, reason, account, session_key, to_addr, amount, block) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-);
+const markUninstalled = db.prepare("UPDATE installs SET uninstalled = 1 WHERE account = ? AND uninstalled = 0");
+const allInstalledAccounts = db.prepare("SELECT DISTINCT account FROM installs WHERE uninstalled = 0");
 
 // ---------- rpc helpers ----------
 const provider = new ethers.JsonRpcProvider(RPC_URL);
+const blockTsCache = new Map();
 
 async function withRetry(fn, label) {
   let delay = 1000;
@@ -173,8 +215,60 @@ async function checkChain() {
   }
 }
 
+async function blockTimestamp(blockNumber) {
+  if (blockTsCache.has(blockNumber)) return blockTsCache.get(blockNumber);
+  const block = await withRetry(() => provider.getBlock(blockNumber), `getBlock(${blockNumber})`);
+  const ts = Number(block.timestamp);
+  blockTsCache.set(blockNumber, ts);
+  return ts;
+}
+
+// Best-effort: recover the manifest hash from the install tx when it went
+// through installPlugin(address,bytes32,bytes,(address,uint8)[]).
+// Returns null when not decodable — NULL beats a guess.
+async function manifestHashFromTx(txHash) {
+  try {
+    const tx = await withRetry(() => provider.getTransaction(txHash), `getTransaction(${txHash})`);
+    if (!tx || !tx.data || !tx.data.startsWith(INSTALL_PLUGIN_SEL)) return null;
+    const decoded = iface.decodeFunctionData(
+      "installPlugin(address,bytes32,bytes,(address,uint8)[])",
+      tx.data
+    );
+    return decoded[1]; // manifestHash
+  } catch {
+    return null;
+  }
+}
+
+// Verify installed-state from chain: for each account with uninstalled = 0,
+// call getInstalledPlugins() and mark uninstalled = 1 where the plugin is
+// no longer listed. Read-only; keeps the stats API's pluginsInstalled honest.
+async function verifyInstalls() {
+  const rows = allInstalledAccounts.all();
+  let marked = 0;
+  for (const { account } of rows) {
+    try {
+      const data = await withRetry(
+        () => provider.call({ to: account, data: GET_INSTALLED_PLUGINS_SEL }),
+        `getInstalledPlugins(${account})`
+      );
+      const [plugins] = accountIface.decodeFunctionResult("getInstalledPlugins", data);
+      const stillThere = plugins.some(
+        (p) => p.toLowerCase() === PLUGIN_ADDRESS_CHECKSUMMED.toLowerCase()
+      );
+      if (!stillThere) {
+        markUninstalled.run(account);
+        marked++;
+      }
+    } catch (err) {
+      console.warn(`WARN: getInstalledPlugins(${account}) failed: ${err.shortMessage || err.message} — leaving uninstalled=0 (honest unknown).`);
+    }
+  }
+  return marked;
+}
+
 // ---------- decode & write ----------
-function handleLog(log) {
+async function handleLog(log) {
   let parsed;
   try {
     parsed = iface.parseLog(log);
@@ -189,37 +283,45 @@ function handleLog(log) {
   }
   const block = Number(log.blockNumber);
   const tx = log.transactionHash;
+  const ts = await blockTimestamp(block);
 
   switch (parsed.name) {
     case "SessionRegistered": {
-      const { account, sessionKey } = parsed.args;
-      insertInstall.run(account, log.address, block, tx);
+      const { account, sessionKey, perTxCap, windowCap, expiry } = parsed.args;
+      const manifestHash = await manifestHashFromTx(tx);
+      insertInstall.run(account, log.address, tx, block, ts, manifestHash);
+      upsertPolicy.run(
+        account, sessionKey, perTxCap.toString(), windowCap.toString(),
+        Number(expiry), ts
+      );
       return "install";
     }
     case "PolicyUpdated": {
       const { account, perTxCap, windowCap, expiry } = parsed.args;
-      // The reference event carries no sessionKey and no allowlist snapshot.
-      // session_key is stored NULL rather than guessed from elsewhere.
-      insertPolicy.run(
-        null,
-        account,
-        perTxCap.toString(),
-        windowCap.toString(),
-        Number(expiry),
-        "[]",
-        block,
-        tx
-      );
+      // The reference event carries no sessionKey: keep the previously
+      // recorded one rather than NULL-ing it.
+      const prev = db.prepare("SELECT session_key, revoked FROM policies WHERE account = ?").get(account);
+      const sessionKey = prev ? prev.session_key : null;
+      // The reference updatePolicy clears revocation on-chain; mirror that.
+      db.prepare(
+        `INSERT INTO policies(account, session_key, per_tx_cap, window_cap, expiry, revoked, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?)
+         ON CONFLICT(account) DO UPDATE SET
+           per_tx_cap = excluded.per_tx_cap, window_cap = excluded.window_cap,
+           expiry = excluded.expiry, revoked = 0, updated_at = excluded.updated_at`
+      ).run(account, sessionKey, perTxCap.toString(), windowCap.toString(), Number(expiry), ts);
       return "policy";
     }
     case "SessionRevokedEvt": {
       const { account, sessionKey } = parsed.args;
-      insertRevoke.run(sessionKey, account, block, tx);
+      insertRevoke.run(account, sessionKey, tx, block, ts);
+      markRevoked.run(ts, account);
       return "revoke";
     }
     case "SpendAuthorized": {
-      const { account, sessionKey, to, amount } = parsed.args;
-      insertValidation.run(tx, 1, null, account, sessionKey, to, amount.toString(), block);
+      const { account, sessionKey, to, amount, windowSpent } = parsed.args;
+      insertSpend.run(account, sessionKey, to, amount.toString(), tx, block, ts);
+      setWindowSpent.run(windowSpent.toString(), ts, account);
       return "spend";
     }
     default:
@@ -242,16 +344,15 @@ async function scanOnce(fromBlock, toBlock) {
         }),
       `getLogs(${cursor}..${rangeEnd})`
     );
-    const insertTx = db.transaction(() => {
-      for (const log of logs) {
-        counts.logs++;
-        counts[handleLog(log)]++;
-      }
-    });
-    insertTx();
-    // Commit progress only after the whole range is written. The scan caller
+    // Handle sequentially: handleLog does async RPC reads (block ts, tx input).
+    for (const log of logs) {
+      const kind = await handleLog(log);
+      counts.logs++;
+      counts[kind]++;
+    }
+    // Commit progress only after the whole range is written; the caller
     // ensures rangeEnd is CONFIRMATIONS-deep before calling scanOnce.
-    setState("last_indexed_block", String(Number(rangeEnd)));
+    setState("last_block", String(Number(rangeEnd)));
     cursor = rangeEnd + 1n;
   }
   return counts;
@@ -260,11 +361,11 @@ async function scanOnce(fromBlock, toBlock) {
 async function main() {
   await checkChain();
   console.log(`HALLPASS indexer — Arc mainnet (5042), RPC ${RPC_URL}`);
-  console.log(`Plugin: ${PLUGIN_ADDRESS}`);
+  console.log(`Plugin: ${PLUGIN_ADDRESS_CHECKSUMMED}`);
   console.log(`DB: ${DB_PATH} | confirmations: ${CONFIRMATIONS} | range: ${RANGE_SIZE} blocks`);
 
   let fromBlock;
-  const checkpoint = getState("last_indexed_block");
+  const checkpoint = getState("last_block");
   if (checkpoint !== null) {
     fromBlock = BigInt(checkpoint) + 1n;
     console.log(`Resuming from checkpoint: block ${checkpoint} → next ${fromBlock}`);
@@ -274,7 +375,7 @@ async function main() {
   } else {
     const head = await withRetry(() => provider.getBlockNumber(), "getBlockNumber");
     fromBlock = BigInt(head);
-    setState("last_indexed_block", String(head));
+    setState("last_block", String(head));
     console.log(`No checkpoint and no START_BLOCK; starting at current head ${head} (forward-only). Use START_BLOCK=<deploy block> to backfill.`);
   }
 
@@ -289,7 +390,7 @@ async function main() {
           `Head ${head} is within ${CONFIRMATIONS} confirmations of fromBlock ${fromBlock} — nothing new to commit. ` +
             (checkpoint === null && START_BLOCK === null
               ? "Zero events found: the plugin has emitted no indexed events in the scanned range. This is an honest empty result, not a failure."
-              : `Indexed up to checkpoint ${getState("last_indexed_block")}.`)
+              : `Indexed up to checkpoint ${getState("last_block")}.`)
         );
         break;
       }
@@ -300,7 +401,7 @@ async function main() {
     for (const k of Object.keys(totals)) totals[k] += counts[k];
     console.log(
       `Committed blocks ${fromBlock}..${safeHead}: ${counts.logs} logs ` +
-        `(installs=${counts.install} policies=${counts.policy} revokes=${counts.revoke} spends=${counts.spend} skipped=${counts.skipped})`
+        `(installs=${counts.install} policy_updates=${counts.policy} revokes=${counts.revoke} spends=${counts.spend} skipped=${counts.skipped})`
     );
     fromBlock = safeHead + 1n;
 
@@ -308,10 +409,13 @@ async function main() {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   } while (POLL_INTERVAL_MS);
 
+  const marked = await verifyInstalls();
+  if (marked > 0) console.log(`Marked ${marked} install(s) as uninstalled (plugin no longer in getInstalledPlugins()).`);
+
   const totalRows = totals.install + totals.policy + totals.revoke + totals.spend;
   console.log(
-    `\nDone. Plugin events written: installs=${totals.install} policy_updates=${totals.policy} revokes=${totals.revoke} validation_results=${totals.spend} (${totalRows} rows). ` +
-      `Skipped unknown-signature logs: ${totals.skipped}. Checkpoint: ${getState("last_indexed_block")}.`
+    `\nDone. Plugin events written: installs=${totals.install} policy_updates=${totals.policy} revokes=${totals.revoke} spends=${totals.spend} (${totalRows} event rows). ` +
+      `Skipped unknown-signature logs: ${totals.skipped}. Checkpoint: ${getState("last_block")}.`
   );
   if (totalRows === 0) {
     console.log(

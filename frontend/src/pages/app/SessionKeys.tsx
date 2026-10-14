@@ -302,7 +302,7 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
     const status = keyStatus(p)
     if (status === 'revoked') return 'Already revoked — there is nothing left to stop.'
     if (status === 'expired') return 'The pass already expired — there is nothing left to revoke.'
-    if (!revokeRef.current) return 'Revoking is still being wired to a real on-chain transaction — it stays disabled until the wallet module lands.'
+    if (!revokeWired || !revokeRef.current) return 'Revoking is still being wired to a real on-chain transaction — it stays disabled until the wallet module lands.'
     if (!connectedAddress) return 'Connect the owner wallet to revoke a key.'
     if (connectedAddress.toLowerCase() !== p.owner.toLowerCase())
       return 'Only the account owner can revoke this key.'

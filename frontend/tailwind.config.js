@@ -11,7 +11,8 @@ export default {
         text: '#FFF9EF', // headlines + body on dark
       },
       fontFamily: {
-        display: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Design standard §1: ONE heavy grotesque for display + Inter body. No serif anywhere.
+        display: ['"Archivo Black"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         body: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
     },

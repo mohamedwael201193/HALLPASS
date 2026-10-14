@@ -1,8 +1,8 @@
 # HALLPASS — Gas notes (C6)
 
-**Status: ESTIMATES.** `forge` is not installed in this environment and
-`~/workspace/hallpass-build/` currently contains only `.git` (no foundry
-project, no test files), so `forge test --gas-report` could not be run.
+**Status: ESTIMATES.** `forge`/`solc` are not installed in this environment and
+`~/workspace/hallpass-build/test/` and `src/` are still empty (foundry.toml
+scaffold only), so `forge test --gas-report` could not be run.
 Every figure below is derived from the code + the post-Berlin gas schedule
 (cold SLOAD 2,100 / warm 100; cold SSTORE 0→nonzero 22,100 / 0→0 or
 reset ≈2,900 cold; `ecrecover` 3,000; code deposit 200/byte; CREATE 32,000;
