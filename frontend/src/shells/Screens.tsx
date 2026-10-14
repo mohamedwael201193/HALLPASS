@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import Connect from '../pages/app/Connect'
+import Accounts from '../pages/app/Accounts'
 
 /**
  * Temporary mount for a dashboard screen its owner hasn't built yet.
@@ -22,40 +24,14 @@ export function ScreenPlaceholder({ name, next }: { name: string; next: string }
   )
 }
 
-/** (a) Connect — one obvious connect button lives here (F9 wires the real flow). */
+/** (a) Connect — one obvious connect button (F5, live via src/lib). */
 export function ConnectScreen() {
-  return (
-    <div>
-      <ScreenPlaceholder
-        name="Connect"
-        next="connect your wallet — one button, then you're in"
-      />
-      <Link
-        to="/"
-        className="mt-6 inline-block rounded-full border border-text/20 px-6 py-3 text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
-      >
-        ← Back home
-      </Link>
-    </div>
-  )
+  return <Connect />
 }
 
-/** (b) My accounts — smart accounts + installed plugins with status. */
+/** (b) My accounts — smart accounts + installed plugins with status (F5). */
 export function AccountsScreen() {
-  return (
-    <div>
-      <ScreenPlaceholder
-        name="My accounts"
-        next="pick an account to see its hall passes"
-      />
-      <Link
-        to="/app"
-        className="mt-6 inline-block rounded-full border border-text/20 px-6 py-3 text-sm font-semibold text-text transition-colors hover:border-amber hover:text-amber"
-      >
-        ← Back to Connect
-      </Link>
-    </div>
-  )
+  return <Accounts />
 }
 
 /** (c) Plugin marketplace — install/uninstall via real on-chain userOps. */

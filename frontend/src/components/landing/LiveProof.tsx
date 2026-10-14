@@ -7,6 +7,9 @@
  * No invented hashes or addresses.
  */
 
+import { motion } from "framer-motion";
+import { useHidden, EASE_OUT } from "./reveal";
+
 const EXPLORER = "https://explorer.arc.io";
 
 const TOKENS = {
@@ -72,16 +75,16 @@ const PROOFS: Proof[] = [
       "0x113cdef86eabe40139f6252e3fe57907e188c040b8396545bcba38e22a076467",
     kind: "tx",
     proves:
-      "Session key execute(payee, 0.005). Status 1 — the agent spends inside bounds. The direct-on-chain signing bypass is gated: windowSpent 0 → 0.005.",
+      "Session key execute(payee, 0.005). Status 1 — the agent spends inside bounds. The on-chain accounting stayed exact: windowSpent 0 → 0.005.",
   },
   {
     group: "Enforcement",
-    label: "Real v0.7 userOp, session-key ECDSA — self-relayed handleOps",
+    label: "Real v0.7 userOp, session-key signature — sent directly",
     value:
       "0x8579d7b6f321d098b3ab6f12bc6e7cec3b6cd75c2d3d78a51eb059a850428ad4",
     kind: "tx",
     proves:
-      "A genuine ERC-4337 userOp, not a raw EOA call. windowSpent 0.005 → 0.006, TOCTOU-atomic. (No public v0.7 bundler on Arc — userOps were self-relayed, disclosed honestly.)",
+      "A genuine ERC-4337 userOp, not a raw wallet call. windowSpent 0.005 → 0.006, counted atomically. (No public v0.7 bundler on Arc — userOps were self-relayed, disclosed honestly.)",
   },
   {
     group: "Enforcement",
@@ -132,6 +135,7 @@ function linkFor(p: Proof): string {
 }
 
 export default function LiveProof() {
+  const hidden = useHidden(40);
   const groups = ["Install", "Enforcement", "Typed-data gate"];
   return (
     <section
@@ -142,7 +146,13 @@ export default function LiveProof() {
         padding: "96px 24px",
       }}
     >
-      <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+      <motion.div
+        initial={hidden}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={{ duration: 0.7, ease: EASE_OUT }}
+        style={{ maxWidth: 1080, margin: "0 auto" }}
+      >
         <p
           style={{
             color: TOKENS.amber,
@@ -190,13 +200,19 @@ export default function LiveProof() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                 gap: 16,
               }}
             >
-              {PROOFS.filter((p) => p.group === g).map((p) => (
-                <a
+              {PROOFS.filter((p) => p.group === g).map((p, i) => (
+                <motion.div
                   key={p.value}
+                  initial={hidden}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{ duration: 0.6, ease: EASE_OUT, delay: (i % 3) * 0.07 }}
+                >
+                <a
                   href={linkFor(p)}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -208,6 +224,8 @@ export default function LiveProof() {
                     padding: 20,
                     textDecoration: "none",
                     color: "inherit",
+                    height: "100%",
+                    boxSizing: "border-box",
                   }}
                 >
                   <p style={{ fontWeight: 700, fontSize: 15, margin: "0 0 10px" }}>
@@ -254,18 +272,16 @@ export default function LiveProof() {
                     View on Arc explorer ↗
                   </p>
                 </a>
+                </motion.div>
               ))}
             </div>
           </div>
         ))}
 
-        <p style={{ color: TOKENS.muted, fontSize: 13.5, marginTop: 8 }}>
-          Honest bounds: no public ERC-4337 v0.7 bundler exists on Arc yet, so
-          userOps were self-relayed; the policy binds account execution either
-          way. Total sprint gas ≈ 0.25 USDC. No principal lost. Keys never
-          printed.
+        <p style={{ color: TOKENS.muted, fontSize: 13, marginTop: 24, maxWidth: 720 }}>
+          *no public ERC-4337 v0.7 bundler exists on Arc yet, so userOps were self-relayed; the policy binds account execution either way. sprint gas ≈ 0.25 USDC, no principal lost, keys never printed.
         </p>
-      </div>
+      </motion.div>
     </section>
   );
 }

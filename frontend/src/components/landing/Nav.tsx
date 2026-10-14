@@ -13,7 +13,7 @@ export default function Nav() {
   ];
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header className="fixed inset-x-0 top-0 z-50 bg-[#121110]/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
         <a href="#top" className="flex items-center gap-3" aria-label="Hall Pass home">
           <Logo size={34} />

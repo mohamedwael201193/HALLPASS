@@ -113,7 +113,7 @@ contract HallpassForkTest is Test {
     /// @notice SELF-CHECK. The local IPlugin interface id matches the bible's
     ///         0x043140ed extracted from live Address Book bytecode.
     function test_LocalIPluginInterfaceIdMatchesBible() public pure {
-        assertEq(type(IPlugin).interfaceId, IPLUGIN_ID, "IPlugin interfaceId mismatch");
+        assertTrue(type(IPlugin).interfaceId == IPLUGIN_ID, "IPlugin interfaceId mismatch");
     }
 
     // ------------------------------------------------------------------
@@ -158,7 +158,7 @@ contract HallpassForkTest is Test {
     /// @notice SELF-CHECK. The 1271 MAGIC value equals the canonical selector
     ///         of isValidSignature(bytes32,bytes) (ERC-1271).
     function test_IsValidSignatureMagicSelfCheck() public pure {
-        assertEq(bytes4(keccak256("isValidSignature(bytes32,bytes)")), IS_VALID_SIG);
+        assertTrue(bytes4(keccak256("isValidSignature(bytes32,bytes)")) == IS_VALID_SIG);
     }
 
     // ------------------------------------------------------------------
@@ -194,25 +194,26 @@ contract HallpassForkTest is Test {
     ///         signatures. This proves internal consistency, NOT that the
     ///         chain exposes them — the live-chain side is covered above.
     function test_BibleSelectorsAreCanonical() public pure {
-        assertEq(
-            bytes4(keccak256("installPlugin(address,bytes32,bytes,(address,uint8)[])")),
-            INSTALL_PLUGIN,
+        assertTrue(
+            bytes4(keccak256("installPlugin(address,bytes32,bytes,(address,uint8)[])")) == INSTALL_PLUGIN,
             "installPlugin selector mismatch"
         );
-        assertEq(
-            bytes4(keccak256("uninstallPlugin(address,bytes,bytes)")),
-            UNINSTALL_PLUGIN,
+        assertTrue(
+            bytes4(keccak256("uninstallPlugin(address,bytes,bytes)")) == UNINSTALL_PLUGIN,
             "uninstallPlugin selector mismatch"
         );
-        assertEq(bytes4(keccak256("execute(address,uint256,bytes)")), EXECUTE, "execute selector mismatch");
-        assertEq(
-            bytes4(keccak256("executeBatch(address[],uint256[],bytes[])")),
-            EXECUTE_BATCH,
+        assertTrue(bytes4(keccak256("execute(address,uint256,bytes)")) == EXECUTE, "execute selector mismatch");
+        // NOTE: the bible §4.1 table prints the signature string as
+        // executeBatch(address[],uint256[],bytes[]), whose selector is
+        // 0x47e1da2a — NOT 0x34fcd5be. The correct Circle MSCA signature is
+        // the tuple-array form below (matches this repo's EXECUTE_BATCH
+        // constant and its abi.decode(..., (Call[])) in _authorizeSpend).
+        assertTrue(
+            bytes4(keccak256("executeBatch((address,uint256,bytes)[])")) == EXECUTE_BATCH,
             "executeBatch selector mismatch"
         );
-        assertEq(
-            bytes4(keccak256("preExecutionHook(uint8,address,uint256,bytes)")),
-            0x46d60eb2,
+        assertTrue(
+            bytes4(keccak256("preExecutionHook(uint8,address,uint256,bytes)")) == 0x46d60eb2,
             "preExecutionHook selector mismatch"
         );
     }
@@ -245,7 +246,7 @@ contract HallpassForkTest is Test {
         bytes memory callData = abi.encodeWithSelector(INSTALL_PLUGIN, plugin, manifestHash, installData, deps);
 
         // (a) selector
-        assertEq(bytes4(callData), INSTALL_PLUGIN, "install calldata selector != f85730f4");
+        assertTrue(bytes4(callData) == INSTALL_PLUGIN, "install calldata selector != f85730f4");
 
         // (b) full ABI round-trip of the tail
         (address p, bytes32 mh, bytes memory id, ManifestDependency[] memory d) =
@@ -344,14 +345,19 @@ contract HallpassForkTest is Test {
         (HallpassPlugin plugin, address account, address owner, address session) = _installedPlugin();
         address payee = makeAddr("payee");
 
+        // windowCap = 0.02. Two spends fit; the third pushes 0.005 + 0.01 +
+        // 0.01 = 0.025 > 0.02, so it must revert (strictly-greater check).
         vm.prank(account);
-        plugin.runtimeValidationFunction(FID_SPEND, session, 0, _execCalldata(payee, 1e16)); // window 0 -> 0.01
+        plugin.runtimeValidationFunction(FID_SPEND, session, 0, _execCalldata(payee, 5e15)); // window 0 -> 0.005
+
+        vm.prank(account);
+        plugin.runtimeValidationFunction(FID_SPEND, session, 0, _execCalldata(payee, 1e16)); // window 0.005 -> 0.015
 
         vm.prank(account);
         vm.expectRevert(
-            abi.encodeWithSelector(HallpassPlugin.WindowCapExceeded.selector, uint256(2e16), uint256(2e16))
+            abi.encodeWithSelector(HallpassPlugin.WindowCapExceeded.selector, uint256(25e15), uint256(2e16))
         );
-        plugin.runtimeValidationFunction(FID_SPEND, session, 0, _execCalldata(payee, 1e16)); // 0.02 > 0.02 cap
+        plugin.runtimeValidationFunction(FID_SPEND, session, 0, _execCalldata(payee, 1e16)); // 0.025 > 0.02
     }
 
     /// @notice LOCALLY-SIMULATED. Access control: owner bypasses the policy;

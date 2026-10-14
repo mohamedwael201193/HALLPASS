@@ -233,12 +233,12 @@ export async function verifyPlugin(
   let manifestHash: Hex = '0x';
   if (hasCode) {
     try {
-      supportsIPlugin = await client.readContract({
+      supportsIPlugin = (await client.readContract({
         address: plugin,
         abi: ['function supportsInterface(bytes4) view returns (bool)'] as const,
         functionName: 'supportsInterface',
         args: ['0x043140ed' as Hex],
-      });
+      })) as boolean;
     } catch {
       supportsIPlugin = false;
     }
@@ -404,11 +404,11 @@ export async function getInstalledPlugins(
   client: PublicClient,
   account: Address,
 ): Promise<Address[]> {
-  return client.readContract({
+  return (await client.readContract({
     address: account,
     abi: accountAbi,
     functionName: 'getInstalledPlugins',
-  });
+  })) as Address[];
 }
 
 export async function isPluginInstalled(
@@ -422,12 +422,12 @@ export async function isPluginInstalled(
 
 /** ERC-20 USDC balance (6 decimals) of an account. */
 export async function getUsdcBalance(client: PublicClient, account: Address): Promise<bigint> {
-  return client.readContract({
+  return (await client.readContract({
     address: USDC_ADDRESS,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: [account],
-  });
+  })) as bigint;
 }
 
 export { ARC_CHAIN_ID };

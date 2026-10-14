@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { motion, MotionConfig } from "framer-motion";
 import Logo from "./Logo";
-import heroImg from "@/assets/hero.png";
+import heroImg from "../../assets/hero.png";
 
 type Stats = {
   pluginsInstalled: number;
   spendsAllowed: number;
   spendsBlocked: number;
+  source?: string;
 };
 
 /**
  * Live stats are rendered ONLY when the API returns real values.
  * Per design law §3: no real stat → the row is omitted. Never zeros-with-caption.
+ * "Real" means the API's source field says hallpass-indexer — an
+ * indexer-unavailable/degraded response renders NOTHING, not zeros.
  */
 function useLiveStats(): Stats | null {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -25,7 +28,12 @@ function useLiveStats(): Stats | null {
       })
       .then((data: Stats) => {
         const vals = [data.pluginsInstalled, data.spendsAllowed, data.spendsBlocked];
-        if (!cancelled && vals.every((v) => Number.isFinite(v))) setStats(data);
+        if (
+          !cancelled &&
+          data.source === "hallpass-indexer" &&
+          vals.every((v) => Number.isFinite(v))
+        )
+          setStats(data);
       })
       .catch(() => {
         /* row stays omitted — nothing real to show */

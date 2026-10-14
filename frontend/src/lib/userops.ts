@@ -107,12 +107,12 @@ export async function buildInstallPluginUserOp(
   const initData = encodePolicyInitData(args);
   const callData = encodeInstallPluginCalldata(args.pluginAddress, args.manifestHash, initData);
 
-  const nonce = await client.readContract({
+  const nonce = (await client.readContract({
     address: entryPoint,
     abi: entryPointAbi,
     functionName: 'getNonce',
     args: [args.account, 0n],
-  });
+  })) as bigint;
 
   const accountGasLimits = encodePacked(
     ['uint128', 'uint128'],
@@ -223,12 +223,12 @@ export async function getEntryPointDeposit(
   account: Address,
   entryPoint: Address = ENTRYPOINT_ADDRESS,
 ): Promise<bigint> {
-  return client.readContract({
+  return (await client.readContract({
     address: entryPoint,
     abi: entryPointAbi,
     functionName: 'balanceOf',
     args: [account],
-  });
+  })) as bigint;
 }
 
 /**

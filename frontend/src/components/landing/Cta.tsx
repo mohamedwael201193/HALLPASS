@@ -1,15 +1,19 @@
 /**
  * Cta — the final ask. Big, amber, confident.
+ *
+ * Design-standard §6: the page's single primary CTA belongs to the hero,
+ * so this band uses ghost/outline buttons only — no competing primary.
  */
 
+import { motion } from "framer-motion";
+import { useHidden, EASE_OUT } from "./reveal";
+
 const TOKENS = {
-  bg: "#121110",
   amber: "#FFB224",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.62)",
 };
 
 export default function Cta() {
+  const hidden = useHidden(48);
   return (
     <section
       style={{
@@ -19,19 +23,23 @@ export default function Cta() {
         textAlign: "center",
       }}
     >
-      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <motion.div
+        initial={hidden}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={{ duration: 0.7, ease: EASE_OUT }}
+        style={{ maxWidth: 860, margin: "0 auto" }}
+      >
         <h2
           style={{
             fontSize: "clamp(36px, 6vw, 64px)",
-            lineHeight: 1.02,
-            letterSpacing: "-0.02em",
+            lineHeight: 1.15,
+            letterSpacing: "-0.01em",
             fontWeight: 800,
             margin: "0 0 16px",
           }}
         >
-          Your agent goes to work tomorrow.
-          <br />
-          Give it a hall pass — not your keys.
+          Your agent goes to work tomorrow. Give it a hall pass — not your keys.
         </h2>
         <p
           style={{
@@ -58,13 +66,14 @@ export default function Cta() {
             href="#live-proof"
             style={{
               display: "inline-block",
-              background: "#121110",
-              color: "#FFF9EF",
+              background: "transparent",
+              color: "#121110",
               fontWeight: 700,
               fontSize: 17,
-              padding: "16px 36px",
+              padding: "15px 34px",
               borderRadius: 12,
               textDecoration: "none",
+              border: "2px solid #121110",
             }}
           >
             Verify the live proof
@@ -77,16 +86,16 @@ export default function Cta() {
               color: "#121110",
               fontWeight: 700,
               fontSize: 17,
-              padding: "16px 36px",
+              padding: "15px 34px",
               borderRadius: 12,
               textDecoration: "none",
-              border: "2px solid #121110",
+              border: "2px solid rgba(18,17,16,0.45)",
             }}
           >
             Read the FAQ
           </a>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

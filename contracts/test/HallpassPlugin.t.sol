@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // HallpassPlugin unit tests — Foundry / forge-std.
 //
-// Tests the REAL plugin contract (src/HallpassPlugin.sol, the H9 reference
-// artifact). The plugin keys policy by msg.sender == the MSCA account (it is
-// CALLED by accounts, not delegate-called), so `vm.prank(account)` faithfully
-// models the account invoking the plugin — no mocks of the plugin itself.
+// Tests the REAL plugin contract (contracts/src/HallpassPlugin.sol — the
+// coordinator-fixed build source; the 62-digit malleability typo from the H9
+// research artifact was fixed at line 396 per C6/H-1). The plugin keys policy
+// by msg.sender == the MSCA account (it is CALLED by accounts, not
+// delegate-called), so `vm.prank(account)` faithfully models the account
+// invoking the plugin — no mocks of the plugin itself.
 //
 // Conventions: amounts are native wei (18 decimals), matching the plugin's
 // policy units (bible §4.2: 0.01 USDC cap = 10000000000000000).
@@ -33,15 +35,19 @@ contract HallpassPluginTest is Test {
     uint8 constant FID_USEROP = 2;
     uint8 constant FID_OWNER = 3;
 
-    // The anti-malleability bound exactly as written in the source under test.
-    // It is a 62-hex-digit value (~2^247), i.e. the research typo documented in
-    // bible §4.5 — NOT the true secp256k1 half-order. Quoted, not fixed: the
-    // tests must pin the source's actual behavior.
-    uint256 constant SRC_S_BOUND =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A450ABBEB08BC4FBE82A;
-
     uint256 constant SECP256K1_N =
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    // floor(secp256k1_n / 2) — the ECDSA anti-malleability bound the contract
+    // MUST enforce. Derivation: n is odd, so floor(n/2) = (n-1)/2, computed
+    // independently (python: hex((n-1)//2)) and cross-checked against SEC 2
+    // §2.4.1 and OpenZeppelin's ECDSA HALF_ORDER. History: the H9 research
+    // artifact shipped a 62-hex-digit typo here (~2^247, bible §4.5); the
+    // coordinator fixed src/HallpassPlugin.sol line 396 to the value below
+    // (C6/H-1). test_MalleabilityBoundIsTrueHalfOrder pins it behaviorally so
+    // CI catches any regression forever.
+    uint256 constant TRUE_HALF_ORDER =
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     uint256 constant PER_TX_CAP = 0.01 ether; // 1e16 native wei
     uint256 constant WINDOW_CAP = 0.025 ether;
@@ -85,6 +91,10 @@ contract HallpassPluginTest is Test {
         (,, c,,,,,,) = plugin.policies(account);
     }
 
+    function _windowCap() internal view returns (uint256 c) {
+        (,,, c,,,,,) = plugin.policies(account);
+    }
+
     function _expiry() internal view returns (uint256 e) {
         (,,,,, e,,,) = plugin.policies(account);
     }
@@ -119,28 +129,66 @@ contract HallpassPluginTest is Test {
         });
     }
 
-    /// @dev The source's malleability bound rejects ~99.6% of uniformly random
-    /// low-S signatures, so a passing signature is ground deterministically:
-    /// iterate digests until vm.sign yields s <= the source's bound.
-    function _groundPassingSignature(uint256 sk)
+    /// @dev Signs a digest with the session key. Post-fix (true half-order
+    /// bound, C6/H-1), libsecp256k1 low-S signatures from vm.sign always
+    /// satisfy the contract's bound — no grinding needed. (Pre-fix, the
+    /// 62-digit typo rejected ~99.6% of such signatures, so this test passing
+    /// at all is itself the regression signal for the fix.)
+    function _signUserOp(uint256 sk, bytes32 digest) internal returns (bytes memory sig) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(sk, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// @dev Returns true iff submitting `sVal` as the signature's s trips the
+    /// contract's "malleable s" bound check. The bound is evaluated BEFORE
+    /// ecrecover, so the revert reason alone distinguishes the two cases:
+    ///   s > bound  → "malleable s"
+    ///   s <= bound → ecrecover runs on (r, s) garbage → "bad sig", or a
+    ///                 custom error (UnknownSigner) — never "malleable s".
+    function _tripsMalleabilityBound(bytes32 digest, bytes32 r, uint256 sVal)
         internal
-        returns (bytes32 digest, bytes memory sig)
+        returns (bool)
     {
-        for (uint256 i = 0; i < 100000; i++) {
-            digest = keccak256(abi.encode("hallpass-userop", i));
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(sk, digest);
-            if (uint256(s) <= SRC_S_BOUND) {
-                return (digest, abi.encodePacked(r, s, v));
+        bytes memory sig = abi.encodePacked(r, bytes32(sVal), uint8(27));
+        PackedUserOperation memory uo = _userOp(_execCalldata(payeeA, 0.005 ether), sig);
+        vm.prank(account); // the plugin keys policy by msg.sender == the account
+        try plugin.userOpValidationFunction(FID_USEROP, uo, digest) returns (uint256) {
+            return false;
+        } catch Error(string memory reason) {
+            return keccak256(bytes(reason)) == keccak256("malleable s");
+        } catch {
+            // custom error (e.g. UnknownSigner) or panic: the bound check passed
+            return false;
+        }
+    }
+
+    /// @dev Binary-searches the EXACT anti-malleability constant the deployed
+    /// bytecode enforces, without reading the source literal.
+    function _probeMalleabilityBound() internal returns (uint256) {
+        bytes32 digest = keccak256("hallpass-bound-probe");
+        (, bytes32 r,) = vm.sign(sessionSk, digest);
+        uint256 lo = 0; // passes the bound check
+        uint256 hi = SECP256K1_N; // trips it (n exceeds any valid bound)
+        for (uint256 i = 0; i < 256; i++) {
+            // overflow-safe midpoint: (lo + hi) / 2 can overflow once lo and
+            // hi are both near 2^256 (this exact bug cost one red run: the
+            // second probe iteration panicked with 0x11).
+            uint256 mid = lo + (hi - lo) / 2;
+            if (mid == lo) break;
+            if (_tripsMalleabilityBound(digest, r, mid)) {
+                hi = mid;
+            } else {
+                lo = mid;
             }
         }
-        revert("no bound-passing signature ground");
+        return lo;
     }
 
     // =====================================================================
     // 1. Manifest + ERC-165
     // =====================================================================
 
-    function test_ManifestHashIsDeterministic() public {
+    function test_ManifestHashIsDeterministic() public view {
         // bible §4.6: manifestHash = keccak256(abi.encode(plugin.pluginManifest()))
         bytes32 h1 = keccak256(abi.encode(plugin.pluginManifest()));
         bytes32 h2 = keccak256(abi.encode(plugin.pluginManifest()));
@@ -148,7 +196,7 @@ contract HallpassPluginTest is Test {
         assertTrue(h1 != bytes32(0), "manifest hash must be non-zero");
     }
 
-    function test_ManifestRegistersFunctions() public {
+    function test_ManifestRegistersFunctions() public view {
         PluginManifest memory m = plugin.pluginManifest();
 
         assertEq(m.executionFunctions.length, 2, "two management functions");
@@ -179,22 +227,22 @@ contract HallpassPluginTest is Test {
         assertFalse(m.permitAnyExternalAddress, "plugin must not permit any external address");
     }
 
-    function test_SupportsIPluginInterface() public {
+    function test_SupportsIPluginInterface() public view {
         // bible §4.1: type(IPlugin).interfaceId == 0x043140ed
         // (extracted from the live Address Book bytecode).
         assertEq(type(IPlugin).interfaceId, bytes4(0x043140ed));
         assertTrue(plugin.supportsInterface(type(IPlugin).interfaceId));
     }
 
-    function test_SupportsERC165() public {
+    function test_SupportsERC165() public view {
         assertTrue(plugin.supportsInterface(bytes4(0x01ffc9a7)));
     }
 
-    function test_RejectsUnknownInterface() public {
+    function test_RejectsUnknownInterface() public view {
         assertFalse(plugin.supportsInterface(bytes4(0xdeadbeef)));
     }
 
-    function test_NativeSelectorsMatchSource() public {
+    function test_NativeSelectorsMatchSource() public pure {
         // The source hardcodes EXECUTE=0xb61d27f6 / EXECUTE_BATCH=0x34fcd5be;
         // derive them here so the test pins derivation, not recall.
         assertEq(EXECUTE, bytes4(0xb61d27f6));
@@ -218,6 +266,8 @@ contract HallpassPluginTest is Test {
             abi.encode(sessionKey, owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist)
         );
 
+        // NOTE: the auto-generated `policies` getter omits the dynamic
+        // `allowlist` array — 9 fields, not 10 (C5 line-216 fix).
         (
             address sk,
             address own,
@@ -247,12 +297,16 @@ contract HallpassPluginTest is Test {
         // sessionKey == address(0)
         vm.expectRevert(HallpassPlugin.BadInit.selector);
         vm.prank(account);
-        plugin.onInstall(abi.encode(address(0), owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist));
+        plugin.onInstall(
+            abi.encode(address(0), owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist)
+        );
 
         // sessionKey == owner
         vm.expectRevert(HallpassPlugin.BadInit.selector);
         vm.prank(account);
-        plugin.onInstall(abi.encode(owner, owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist));
+        plugin.onInstall(
+            abi.encode(owner, owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist)
+        );
     }
 
     function test_UpdatePolicy() public {
@@ -261,25 +315,27 @@ contract HallpassPluginTest is Test {
         _validateAs(sessionKey, _execCalldata(payeeA, 0.005 ether));
 
         uint256 newCap = 0.05 ether;
+        uint256 newWindowCap = 0.1 ether;
         uint256 newExpiry = block.timestamp + 30 days;
         address[] memory newAllowlist = new address[](1);
         newAllowlist[0] = payeeB;
 
         vm.expectEmit(true, false, false, true);
-        emit HallpassPlugin.PolicyUpdated(account, newCap, WINDOW_CAP, newExpiry);
+        emit HallpassPlugin.PolicyUpdated(account, newCap, newWindowCap, newExpiry);
 
         vm.prank(account);
-        plugin.updatePolicy(sessionKey, newCap, WINDOW_CAP, WINDOW_SECS, newExpiry, newAllowlist);
+        plugin.updatePolicy(sessionKey, newCap, newWindowCap, WINDOW_SECS, newExpiry, newAllowlist);
 
         assertEq(_sessionKey(), sessionKey);
         assertEq(_perTxCap(), newCap, "cap updated");
+        assertEq(_windowCap(), newWindowCap, "window cap updated");
         assertEq(_expiry(), newExpiry, "expiry updated");
         assertEq(_winSpent(), 0, "window accounting reset");
         assertEq(_winStart(), block.timestamp, "window restarted");
         assertFalse(_revoked(), "revocation cleared");
 
-        // a spend over the OLD cap but under the NEW cap now passes (to the
-        // newly allowlisted destination — payeeA was replaced by payeeB)
+        // a spend over the OLD per-tx cap but under the NEW caps now passes
+        // (to the newly allowlisted destination — payeeA was replaced by payeeB)
         _validateAs(sessionKey, _execCalldata(payeeB, 0.03 ether));
     }
 
@@ -355,9 +411,7 @@ contract HallpassPluginTest is Test {
         _validateAs(sessionKey, _execCalldata(payeeA, 0.01 ether));
         // 0.02 + 0.01 = 0.03 > 0.025: revert with exact values
         vm.expectRevert(
-            abi.encodeWithSelector(
-                HallpassPlugin.WindowCapExceeded.selector, 0.03 ether, WINDOW_CAP
-            )
+            abi.encodeWithSelector(HallpassPlugin.WindowCapExceeded.selector, 0.03 ether, WINDOW_CAP)
         );
         vm.prank(account);
         plugin.runtimeValidationFunction(FID_SPEND, sessionKey, 0, _execCalldata(payeeA, 0.01 ether));
@@ -448,9 +502,7 @@ contract HallpassPluginTest is Test {
             abi.encode(sessionKey, owner, PER_TX_CAP, WINDOW_CAP, WINDOW_SECS, expiry, allowlist)
         );
 
-        vm.expectRevert(
-            abi.encodeWithSelector(HallpassPlugin.RecipientNotAllowed.selector, payeeB)
-        );
+        vm.expectRevert(abi.encodeWithSelector(HallpassPlugin.RecipientNotAllowed.selector, payeeB));
         vm.prank(account);
         plugin.runtimeValidationFunction(FID_SPEND, sessionKey, 0, _execCalldata(payeeB, 0.005 ether));
 
@@ -465,18 +517,14 @@ contract HallpassPluginTest is Test {
     function test_UnsupportedExecutionReverts() public {
         _installDefault();
         bytes4 sel = bytes4(0x12345678);
-        vm.expectRevert(
-            abi.encodeWithSelector(HallpassPlugin.UnsupportedExecution.selector, sel)
-        );
+        vm.expectRevert(abi.encodeWithSelector(HallpassPlugin.UnsupportedExecution.selector, sel));
         vm.prank(account);
         plugin.runtimeValidationFunction(FID_SPEND, sessionKey, 0, abi.encodePacked(sel));
     }
 
     function test_UnknownFunctionIdReverts() public {
         _installDefault();
-        vm.expectRevert(
-            abi.encodeWithSelector(HallpassPlugin.UnknownFunctionId.selector, uint8(99))
-        );
+        vm.expectRevert(abi.encodeWithSelector(HallpassPlugin.UnknownFunctionId.selector, uint8(99)));
         vm.prank(account);
         plugin.runtimeValidationFunction(99, sessionKey, 0, "");
     }
@@ -500,11 +548,9 @@ contract HallpassPluginTest is Test {
 
     function test_UserOpInPolicySpendPasses() public {
         _installDefault();
-        // NOTE: the source still carries the 62-hex-digit malleability typo
-        // (bible §4.5), so a passing signature must be ground; see helper.
-        (bytes32 digest, bytes memory sig) = _groundPassingSignature(sessionSk);
+        bytes32 digest = keccak256("hallpass-userop");
         PackedUserOperation memory uo =
-            _userOp(_execCalldata(payeeA, 0.005 ether), sig);
+            _userOp(_execCalldata(payeeA, 0.005 ether), _signUserOp(sessionSk, digest));
 
         vm.prank(account);
         uint256 res = plugin.userOpValidationFunction(FID_USEROP, uo, digest);
@@ -520,12 +566,29 @@ contract HallpassPluginTest is Test {
         // high-S counterpart of a valid signature: still recovers the session
         // key via ecrecover, but must trip the anti-malleability bound.
         bytes32 sHi = bytes32(SECP256K1_N - uint256(s));
-        assertGt(uint256(sHi), SRC_S_BOUND, "test precondition: high-S above the bound");
+        assertGt(uint256(sHi), TRUE_HALF_ORDER, "test precondition: high-S above the bound");
         PackedUserOperation memory uo =
             _userOp(_execCalldata(payeeA, 0.005 ether), abi.encodePacked(r, sHi, v));
 
         vm.expectRevert("malleable s");
         vm.prank(account);
         plugin.userOpValidationFunction(FID_USEROP, uo, digest);
+    }
+
+    // =====================================================================
+    // Malleability-bound pin (C6/H-1 regression gate)
+    // =====================================================================
+
+    function test_MalleabilityBoundIsTrueHalfOrder() public {
+        _installDefault();
+        // n is odd → floor(n/2) = (n-1)/2; cross-check the hardcoded value.
+        uint256 expected = (SECP256K1_N - 1) / 2;
+        assertEq(expected, TRUE_HALF_ORDER, "derivation check on the hardcoded half-order");
+        // Behaviorally probe the exact constant the contract enforces.
+        assertEq(
+            _probeMalleabilityBound(),
+            expected,
+            "contract malleability bound != floor(secp256k1_n/2)"
+        );
     }
 }

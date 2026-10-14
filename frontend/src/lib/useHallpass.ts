@@ -4,16 +4,16 @@
 // every executable control submits a real tx/userOp or is disabled with the
 // exact reason — the `disabledReason` fields below feed that copy).
 //
-// Design-standard note (§7): every async action exposes a stable
-// { status, error } shape so screens can render the four states
+// Design-standard note (§7): config gaps and wallet problems surface as
+// explicit reason strings (walletSetupError / pluginConfigError) so screens
+// can render disabled-with-reason controls and the four states
 // (main / empty / loading / error) without inventing copy.
 
 import { useCallback, useMemo } from 'react';
 import { useAccount, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
+import { type Address, type Hex } from 'viem';
 import {
-  type Address,
-  type Hex,
   generatePrivateKey,
   privateKeyToAccount,
 } from 'viem/accounts';

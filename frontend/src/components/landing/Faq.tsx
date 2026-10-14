@@ -3,6 +3,9 @@
  * answer is "not yet", we say so.
  */
 
+import { motion } from "framer-motion";
+import { useHidden, EASE_OUT } from "./reveal";
+
 const TOKENS = {
   bg: "#121110",
   amber: "#FFB224",
@@ -40,6 +43,7 @@ const FAQS = [
 ];
 
 export default function Faq() {
+  const hidden = useHidden(36);
   return (
     <section
       id="faq"
@@ -70,9 +74,13 @@ export default function Faq() {
           Real answers.
         </h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {FAQS.map((f) => (
-            <details
+          {FAQS.map((f, i) => (
+            <motion.details
               key={f.q}
+              initial={hidden}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.6, ease: EASE_OUT, delay: Math.min(i * 0.05, 0.2) }}
               style={{
                 background: TOKENS.card,
                 border: `1px solid ${TOKENS.border}`,
@@ -100,9 +108,12 @@ export default function Faq() {
               >
                 {f.a}
               </p>
-            </details>
+            </motion.details>
           ))}
         </div>
+        <p style={{ fontSize: 13, color: TOKENS.muted, margin: "20px 0 0" }}>
+          *policy binds account execution and 4337 validation; mempool/bundler acceptance is not yet proven — disclosed in the build bible §6. gas figures are measured mainnet values, not estimates.
+        </p>
       </div>
     </section>
   );

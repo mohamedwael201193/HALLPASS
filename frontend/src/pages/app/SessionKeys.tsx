@@ -1,39 +1,53 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useHallpass } from '../../lib/useHallpass'
 import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
 
 /* ============================================================================
  * SessionKeys — the hall passes on one smart account.
- * - Rows come ONLY from GET /api/accounts/{address}/policies (chain-derived
- *   indexer cache). Nothing is invented; if the API is unreachable we show
- *   the error, not placeholders.
- * - Revoke goes through worker F9's real on-chain module when it lands.
- *   Until then the button is disabled WITH the reason shown inline
- *   (hard rule: a control that looks live must be live or disabled-with-reason).
+ * - Rows come ONLY from GET /api/accounts/{address}/policies (indexer cache;
+ *   the chain is truth). Amounts use the API's `formatted` USDC strings —
+ *   raw values are 6-decimal Arc USDC, NOT 18-decimal wei.
+ * - The on-chain overlay (owner, live window spend) comes from
+ *   useHallpass().getPolicy — the chain, not the cache.
+ * - Revoke is a REAL on-chain transaction via useHallpass().revokeSession
+ *   with a plain-words confirm dialog. Disabled buttons always name the
+ *   reason inline.
  * ========================================================================== */
 
 const EXPLORER_TX = 'https://explorer.arc.io/tx/'
-const API_BASE: string =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || ''
+const API_BASE: string = import.meta.env.VITE_API_BASE_URL || ''
 
-interface Policy {
+interface ApiAmount {
+  raw: string
+  formatted: string
+  unit: string
+}
+
+interface ApiSession {
+  sessionKey: string | null
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED'
+  perTxCap: ApiAmount
+  windowCap: ApiAmount
+  expiry: number | null
+  expiresInSeconds: number | null
+  allowlist: string[]
+  allowlistOpen: boolean
+  updatedAtBlock: number
+  updatedInTx: string
+  revokedAtBlock?: number
+  revokedInTx?: string
+}
+
+interface OnChainPolicy {
   sessionKey: string
   owner: string
-  perTxCapWei: string
-  perTxCapUsdc?: string
-  windowCapWei: string
-  windowCapUsdc?: string
-  windowSecs: number
-  windowStart: number
-  windowSpentWei: string
-  windowSpentUsdc?: string
-  expiry: number
-  allowlist: string[]
+  windowSpent: bigint
+  windowCapWei: bigint
+  windowSecs: bigint
   revoked: boolean
-  policyHash?: string
-  installedTx?: string
 }
 
 type LoadState = 'loading' | 'ready' | 'empty' | 'error'
@@ -41,8 +55,6 @@ type LoadState = 'loading' | 'ready' | 'empty' | 'error'
 export interface SessionKeysProps {
   /** Smart account to show keys for. Falls back to ?account= in the URL. */
   accountAddress?: string
-  /** Connected owner wallet (wired by F9's wallet provider when it lands). */
-  connectedAddress?: string
 }
 
 /* ------------------------------- helpers --------------------------------- */
@@ -53,55 +65,42 @@ function truncate(addr?: string, head = 6, tail = 4): string {
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`
 }
 
-/** BigInt-safe wei (18dp) -> trimmed USDC string. No float precision loss. */
-function weiToUsdc(wei?: string): string {
-  if (!wei) return '0'
-  try {
-    const v = BigInt(wei)
-    const unit = 1_000_000_000_000_000_000n
-    const whole = v / unit
-    let frac = (v % unit).toString().padStart(18, '0').slice(0, 6)
-    frac = frac.replace(/0+$/, '')
-    return frac ? `${whole}.${frac}` : `${whole}`
-  } catch {
-    return '0'
-  }
-}
-
-function usdcDisplay(display?: string, wei?: string): string {
-  if (display && display.trim() !== '') return display
-  return weiToUsdc(wei)
-}
-
-function fmtWindow(secs: number): string {
-  if (!secs || secs <= 0) return ''
-  if (secs % 86400 === 0) {
-    const d = secs / 86400
+function fmtWindow(secs: bigint | number): string {
+  const s = Number(secs)
+  if (!s || s <= 0) return ''
+  if (s % 86400 === 0) {
+    const d = s / 86400
     return `per ${d === 1 ? 'day' : `${d} days`}`
   }
-  if (secs % 3600 === 0) {
-    const h = secs / 3600
+  if (s % 3600 === 0) {
+    const h = s / 3600
     return `per ${h === 1 ? 'hour' : `${h} hours`}`
   }
-  if (secs % 60 === 0) {
-    const m = secs / 60
+  if (s % 60 === 0) {
+    const m = s / 60
     return `per ${m === 1 ? 'minute' : `${m} minutes`}`
   }
-  return `per ${secs} seconds`
+  return `per ${s} seconds`
 }
 
-function fmtCountdown(expiry: number, now: number): { text: string; expired: boolean; urgent: boolean } {
-  const diff = expiry - Math.floor(now / 1000)
-  if (diff <= 0) return { text: 'Expired', expired: true, urgent: false }
-  const d = Math.floor(diff / 86400)
-  const h = Math.floor((diff % 86400) / 3600)
-  const m = Math.floor((diff % 3600) / 60)
+/** Remaining seconds from the API's expiresInSeconds snapshot + local clock. */
+function remainingSecs(s: ApiSession, fetchedAtMs: number, nowMs: number): number | null {
+  if (s.expiresInSeconds == null) return null
+  return Math.max(0, Math.round(s.expiresInSeconds - (nowMs - fetchedAtMs) / 1000))
+}
+
+function fmtCountdown(rem: number | null): { text: string; urgent: boolean } | null {
+  if (rem == null) return null
+  if (rem <= 0) return { text: 'Expired', urgent: false }
+  const d = Math.floor(rem / 86400)
+  const h = Math.floor((rem % 86400) / 3600)
+  const m = Math.floor((rem % 3600) / 60)
   let text: string
   if (d > 0) text = `Expires in ${d}d ${h}h`
   else if (h > 0) text = `Expires in ${h}h ${m}m`
   else if (m > 0) text = `Expires in ${m}m`
   else text = 'Expires in under a minute'
-  return { text, expired: false, urgent: diff < 3600 }
+  return { text, urgent: rem < 3600 }
 }
 
 /* ------------------------------ primitives -------------------------------- */
@@ -150,17 +149,15 @@ function Chip({ children, tone = 'neutral' }: { children: React.ReactNode; tone?
   )
 }
 
-type KeyStatus = 'active' | 'expired' | 'revoked'
-
-function StatusChip({ status }: { status: KeyStatus }) {
-  if (status === 'revoked')
+function StatusChip({ status }: { status: ApiSession['status'] }) {
+  if (status === 'REVOKED')
     return (
       <Chip tone="red">
         <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
         Revoked
       </Chip>
     )
-  if (status === 'expired')
+  if (status === 'EXPIRED')
     return (
       <Chip tone="dim">
         <span className="h-1.5 w-1.5 rounded-full bg-text/40" />
@@ -177,7 +174,7 @@ function StatusChip({ status }: { status: KeyStatus }) {
 
 function KeySkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-text/10 bg-text/[0.03] p-5 sm:p-6">
+    <div className="animate-pulse rounded-2xl border border-text/10 bg-text/[0.03] p-5 sm:p-6" aria-hidden="true">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="h-5 w-40 rounded bg-text/10" />
         <div className="h-6 w-20 rounded-full bg-text/10" />
@@ -187,64 +184,46 @@ function KeySkeleton() {
         <div className="h-7 w-36 rounded-full bg-text/10" />
         <div className="h-7 w-28 rounded-full bg-text/10" />
       </div>
-      <div className="mt-4 h-2 w-full rounded-full bg-text/10" />
       <div className="mt-4 h-10 w-28 rounded-full bg-text/10" />
     </div>
   )
 }
 
-/* ----------------------- revoke wiring (F9 module) ------------------------ */
-/* Worker F9 owns the wallet stack (Reown AppKit + wagmi) and the real
- * revokeSessionKey() implementation. We dynamic-import so the page renders
- * (with Revoke disabled + reason) before that module exists.              */
-
-interface RevokeRequest {
-  account: string
-  sessionKey: string
-  policyHash?: string
-  ownerAddress: string
-}
-type RevokeFn = (req: RevokeRequest) => Promise<{ txHash: string }>
-
-const REVOKE_MODULE_PATHS = [
-  '../../lib/sessionKeyOps',
-  '../lib/sessionKeyOps',
-  '../../lib/revoke',
-  '../lib/revoke',
-]
-
-async function loadRevokeModule(): Promise<RevokeFn | null> {
-  for (const p of REVOKE_MODULE_PATHS) {
-    try {
-      const mod: any = await import(/* @vite-ignore */ p)
-      if (typeof mod?.revokeSessionKey === 'function') return mod.revokeSessionKey as RevokeFn
-      if (typeof mod?.default === 'function') return mod.default as RevokeFn
-    } catch {
-      /* module not landed yet — try next candidate */
-    }
-  }
-  return null
-}
-
 /* --------------------------------- page ----------------------------------- */
 
-export default function SessionKeys({ accountAddress, connectedAddress }: SessionKeysProps) {
+export default function SessionKeys({ accountAddress }: SessionKeysProps) {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const account = accountAddress ?? searchParams.get('account') ?? ''
 
+  const {
+    walletReady,
+    walletSetupError,
+    address: connectedAddress,
+    isConnected,
+    isArc,
+    getPolicy,
+    revokeSession,
+    formatNativeUsdc,
+  } = useHallpass()
+
   const [state, setState] = useState<LoadState>('loading')
-  const [policies, setPolicies] = useState<Policy[]>([])
+  const [sessions, setSessions] = useState<ApiSession[]>([])
+  const [fetchedAtMs, setFetchedAtMs] = useState(0)
+  const [asOfBlock, setAsOfBlock] = useState<number | null>(null)
+  const [listNote, setListNote] = useState<string | null>(null)
   const [errorDetail, setErrorDetail] = useState<string>('')
   const [now, setNow] = useState(Date.now())
 
-  const [revokeWired, setRevokeWired] = useState(false)
-  const [confirmKey, setConfirmKey] = useState<Policy | null>(null)
+  const [onChain, setOnChain] = useState<OnChainPolicy | null>(null)
+  const [onChainError, setOnChainError] = useState<string | null>(null)
+
+  const [confirmKey, setConfirmKey] = useState<ApiSession | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [revokeError, setRevokeError] = useState<string | null>(null)
   const [revokedTx, setRevokedTx] = useState<{ key: string; txHash: string } | null>(null)
-  const revokeRef = useRef<RevokeFn | null>(null)
 
-  const fetchPolicies = useCallback(async () => {
+  const fetchSessions = useCallback(async () => {
     if (!account) {
       setState('empty')
       return
@@ -253,15 +232,22 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
     setErrorDetail('')
     try {
       const res = await fetch(`${API_BASE}/api/accounts/${account}/policies`)
-      if (res.status === 404) {
-        setPolicies([])
-        setState('empty')
-        return
+      if (!res.ok) {
+        let detail = `API responded ${res.status}`
+        try {
+          const body = await res.json()
+          if (body?.error?.message) detail = `${detail}: ${body.error.message}`
+        } catch {
+          /* keep status-only detail */
+        }
+        throw new Error(detail)
       }
-      if (!res.ok) throw new Error(`API responded ${res.status}`)
-      const data = await res.json()
-      const list: Policy[] = Array.isArray(data.policies) ? data.policies : []
-      setPolicies(list)
+      const body = await res.json()
+      const list: ApiSession[] = Array.isArray(body?.data?.sessions) ? body.data.sessions : []
+      setSessions(list)
+      setFetchedAtMs(Date.now())
+      setAsOfBlock(typeof body?.asOfBlock === 'number' ? body.asOfBlock : null)
+      setListNote(typeof body?.data?.note === 'string' ? body.data.note : null)
       setState(list.length === 0 ? 'empty' : 'ready')
     } catch (e: any) {
       setErrorDetail(e?.message ?? 'Network error')
@@ -269,9 +255,32 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
     }
   }, [account])
 
+  const fetchOnChain = useCallback(async () => {
+    if (!account) return
+    setOnChainError(null)
+    try {
+      const p = await getPolicy(account as `0x${string}`)
+      setOnChain({
+        sessionKey: p.sessionKey,
+        owner: p.owner,
+        windowSpent: p.windowSpent,
+        windowCapWei: p.windowCapWei,
+        windowSecs: p.windowSecs,
+        revoked: p.revoked,
+      })
+    } catch (e: any) {
+      setOnChain(null)
+      setOnChainError(e?.message ?? 'Could not read the on-chain policy.')
+    }
+  }, [account, getPolicy])
+
   useEffect(() => {
-    void fetchPolicies()
-  }, [fetchPolicies])
+    void fetchSessions()
+  }, [fetchSessions])
+
+  useEffect(() => {
+    void fetchOnChain()
+  }, [fetchOnChain])
 
   // Keep expiry countdowns honest while the page is open.
   useEffect(() => {
@@ -279,53 +288,41 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
     return () => clearInterval(id)
   }, [])
 
-  // Probe for F9's revoke module (disabled-with-reason until it lands).
-  useEffect(() => {
-    let cancelled = false
-    void loadRevokeModule().then((fn) => {
-      if (cancelled) return
-      revokeRef.current = fn
-      setRevokeWired(fn !== null)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  function keyStatus(p: Policy): KeyStatus {
-    if (p.revoked) return 'revoked'
-    if (p.expiry > 0 && p.expiry <= Math.floor(now / 1000)) return 'expired'
-    return 'active'
-  }
-
-  function revokeDisabledReason(p: Policy): string | null {
-    const status = keyStatus(p)
-    if (status === 'revoked') return 'Already revoked — there is nothing left to stop.'
-    if (status === 'expired') return 'The pass already expired — there is nothing left to revoke.'
-    if (!revokeWired || !revokeRef.current) return 'Revoking is still being wired to a real on-chain transaction — it stays disabled until the wallet module lands.'
-    if (!connectedAddress) return 'Connect the owner wallet to revoke a key.'
-    if (connectedAddress.toLowerCase() !== p.owner.toLowerCase())
+  function revokeDisabledReason(s: ApiSession): string | null {
+    if (s.status === 'REVOKED') return 'Already revoked — there is nothing left to stop.'
+    if (s.status === 'EXPIRED') return 'The pass already expired — there is nothing left to revoke.'
+    if (!walletReady || walletSetupError)
+      return 'Wallet setup is incomplete, so revoking is disabled. The app deploy must set the Reown project ID.'
+    if (!isConnected) return 'Connect the owner wallet to revoke a key.'
+    if (!isArc) return 'Switch to the Arc network (chain 5042) to revoke.'
+    if (onChainError) return "Couldn't read the on-chain policy — reload the list and try again."
+    if (onChain && s.sessionKey && onChain.sessionKey.toLowerCase() !== s.sessionKey.toLowerCase())
+      return "The chain's active key for this account is different — this entry is stale."
+    if (onChain && connectedAddress && onChain.owner.toLowerCase() !== connectedAddress.toLowerCase())
       return 'Only the account owner can revoke this key.'
     return null
   }
 
-  async function doRevoke(p: Policy) {
-    const fn = revokeRef.current
-    if (!fn || !connectedAddress) return
+  async function doRevoke(s: ApiSession) {
+    if (!s.sessionKey) return
     setRevoking(true)
     setRevokeError(null)
     try {
-      const { txHash } = await fn({
-        account,
-        sessionKey: p.sessionKey,
-        policyHash: p.policyHash,
-        ownerAddress: connectedAddress,
-      })
-      setRevokedTx({ key: p.sessionKey, txHash })
+      // Real on-chain transaction: owner calls revokeSession through the
+      // account fallback. Money never moves — the pass just dies.
+      const txHash = await revokeSession(account as `0x${string}`)
+      setRevokedTx({ key: s.sessionKey, txHash })
       setConfirmKey(null)
-      void fetchPolicies() // re-read from chain — the chain is truth
+      // Re-read: the chain is truth, the list follows it.
+      void fetchSessions()
+      void fetchOnChain()
     } catch (e: any) {
-      setRevokeError(e?.shortMessage ?? e?.message ?? 'The transaction did not go through.')
+      const msg: string = e?.shortMessage ?? e?.message ?? 'The transaction did not go through.'
+      setRevokeError(
+        /user rejected|rejected/i.test(msg)
+          ? 'You rejected the transaction in your wallet — nothing changed.'
+          : msg,
+      )
     } finally {
       setRevoking(false)
     }
@@ -341,7 +338,7 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
           title="No account selected"
           description="Pick one of your smart accounts first — session keys live on a specific account."
           actionLabel="Go to my accounts"
-          onAction={() => (window.location.href = '/app/accounts')}
+          onAction={() => navigate('/app/accounts')}
         />
       </div>
     )
@@ -394,7 +391,10 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
           message="The key list comes from the indexer, and it didn't answer. Your keys and money are still on-chain — this is just a display problem."
           technicalDetail={errorDetail || undefined}
           retryLabel="Try again"
-          onRetry={() => void fetchPolicies()}
+          onRetry={() => {
+            void fetchSessions()
+            void fetchOnChain()
+          }}
         />
       )}
 
@@ -403,134 +403,136 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
           title="No session keys yet"
           description="A session key is a hall pass for your agent: it can spend, but only within the bounds you set. Create one to get started."
           actionLabel="Set up your first hall pass"
-          onAction={() => (window.location.href = `/app/policy?account=${account}`)}
+          onAction={() => navigate(`/app/policy?account=${account}`)}
         />
       )}
 
       {state === 'ready' && (
-        <div className="flex flex-col gap-4">
-          {policies.map((p, i) => {
-            const status = keyStatus(p)
-            const cd = p.expiry > 0 ? fmtCountdown(p.expiry, now) : null
-            const cap = usdcDisplay(p.perTxCapUsdc, p.perTxCapWei)
-            const windowCap = usdcDisplay(p.windowCapUsdc, p.windowCapWei)
-            const spent = usdcDisplay(p.windowSpentUsdc, p.windowSpentWei)
-            const reason = revokeDisabledReason(p)
-            const spentPct = (() => {
-              try {
-                const used = BigInt(p.windowSpentWei || '0')
-                const capW = BigInt(p.windowCapWei || '0')
-                if (capW === 0n) return 0
-                const pct = Number((used * 100n) / capW)
+        <>
+          <div className="flex flex-col gap-4">
+            {sessions.map((s, i) => {
+              const rem = remainingSecs(s, fetchedAtMs, now)
+              const cd = fmtCountdown(rem)
+              const reason = revokeDisabledReason(s)
+              // Live window spend — only when the chain's active key is this card.
+              const liveSpend =
+                onChain &&
+                s.sessionKey &&
+                onChain.sessionKey.toLowerCase() === s.sessionKey.toLowerCase() &&
+                !onChain.revoked
+                  ? onChain
+                  : null
+              const spentPct = (() => {
+                if (!liveSpend || liveSpend.windowCapWei === 0n) return 0
+                const pct = Number((liveSpend.windowSpent * 100n) / liveSpend.windowCapWei)
                 return Math.min(100, Math.max(0, pct))
-              } catch {
-                return 0
-              }
-            })()
+              })()
 
-            return (
-              <motion.div
-                key={p.sessionKey}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: Math.min(i * 0.06, 0.3) }}
-                className={`rounded-2xl border p-5 sm:p-6 ${
-                  status === 'revoked'
-                    ? 'border-red-400/20 bg-text/[0.02]'
-                    : 'border-text/10 bg-text/[0.03]'
-                }`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-body text-xs uppercase tracking-wider text-text/40">Session key</p>
-                    <p className="mt-1 font-mono text-lg font-semibold text-text">
-                      {truncate(p.sessionKey)}
-                      <CopyButton value={p.sessionKey} label="session key address" />
-                    </p>
+              return (
+                <motion.div
+                  key={s.sessionKey ?? `session-${i}`}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: Math.min(i * 0.06, 0.3) }}
+                  className={`rounded-2xl border p-5 sm:p-6 ${
+                    s.status === 'REVOKED'
+                      ? 'border-red-400/20 bg-text/[0.02]'
+                      : 'border-text/10 bg-text/[0.03]'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-body text-xs uppercase tracking-wider text-text/40">Session key</p>
+                      <p className="mt-1 font-mono text-lg font-semibold text-text">
+                        {truncate(s.sessionKey ?? undefined)}
+                        {s.sessionKey && <CopyButton value={s.sessionKey} label="session key address" />}
+                      </p>
+                    </div>
+                    <StatusChip status={s.status} />
                   </div>
-                  <StatusChip status={status} />
-                </div>
 
-                {/* Policy summary chips: cap · expiry countdown · destinations */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Chip tone="amber">
-                    ≤ {cap} USDC per payment
-                  </Chip>
-                  <Chip>
-                    ≤ {windowCap} USDC {fmtWindow(p.windowSecs)}
-                  </Chip>
-                  {cd && (
-                    <Chip tone={cd.urgent ? 'red' : 'neutral'}>
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 7v5l3 2" />
-                      </svg>
-                      {cd.text}
-                    </Chip>
-                  )}
-                  <Chip>
-                    {p.allowlist.length === 0 ? (
-                      <span>Any destination — caps still apply</span>
-                    ) : (
-                      <span>
-                        {p.allowlist.length} {p.allowlist.length === 1 ? 'destination' : 'destinations'}
-                      </span>
+                  {/* Policy summary chips: cap · expiry countdown · destinations */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Chip tone="amber">≤ {s.perTxCap.formatted} USDC per payment</Chip>
+                    <Chip>≤ {s.windowCap.formatted} USDC per window</Chip>
+                    {cd && (
+                      <Chip tone={cd.urgent ? 'red' : 'neutral'}>
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 7v5l3 2" />
+                        </svg>
+                        {cd.text}
+                      </Chip>
                     )}
-                  </Chip>
-                </div>
-
-                {/* Window spend */}
-                <div className="mt-4">
-                  <div className="flex items-center justify-between font-body text-xs text-text/50">
-                    <span>
-                      {spent} of {windowCap} USDC used this window
-                    </span>
-                    <span>{spentPct}%</span>
+                    <Chip>
+                      {s.allowlistOpen ? (
+                        <span>Any destination — caps still apply</span>
+                      ) : (
+                        <span>
+                          {s.allowlist.length} {s.allowlist.length === 1 ? 'destination' : 'destinations'}
+                        </span>
+                      )}
+                    </Chip>
                   </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-text/10">
-                    <div
-                      className="h-full rounded-full bg-amber transition-all duration-500"
-                      style={{ width: `${spentPct}%` }}
-                    />
-                  </div>
-                </div>
 
-                {p.policyHash && (
-                  <p className="mt-3 font-body text-xs text-text/40">
-                    Policy committed on-chain:{' '}
-                    <span className="font-mono">{truncate(p.policyHash)}</span>
-                    <CopyButton value={p.policyHash} label="policy hash" />
-                  </p>
-                )}
-
-                {/* Revoke */}
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    disabled={reason !== null}
-                    onClick={() => {
-                      setRevokeError(null)
-                      setConfirmKey(p)
-                    }}
-                    className={`rounded-full px-5 py-2.5 font-body text-sm font-semibold transition-all duration-200 ${
-                      reason !== null
-                        ? 'cursor-not-allowed bg-text/10 text-text/40'
-                        : 'border border-red-400/40 text-red-300 hover:bg-red-400/10 active:scale-[0.97]'
-                    }`}
-                  >
-                    Revoke
-                  </button>
-                  {reason && (
-                    <p className="mt-2 max-w-md font-body text-xs text-text/50">{reason}</p>
+                  {/* Live window spend — chain truth, only for the active key */}
+                  {liveSpend && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between font-body text-xs text-text/50">
+                        <span>
+                          {formatNativeUsdc(liveSpend.windowSpent)} of{' '}
+                          {formatNativeUsdc(liveSpend.windowCapWei)} USDC used this window{' '}
+                          {fmtWindow(liveSpend.windowSecs)}
+                        </span>
+                        <span>{spentPct}%</span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-text/10">
+                        <div
+                          className="h-full rounded-full bg-amber transition-all duration-500"
+                          style={{ width: `${spentPct}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 font-body text-[11px] text-text/40">
+                        Live from the chain — the indexer cache can lag behind.
+                      </p>
+                    </div>
                   )}
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
+
+                  {/* Revoke */}
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      disabled={reason !== null}
+                      onClick={() => {
+                        setRevokeError(null)
+                        setConfirmKey(s)
+                      }}
+                      className={`rounded-full px-5 py-2.5 font-body text-sm font-semibold transition-all duration-200 ${
+                        reason !== null
+                          ? 'cursor-not-allowed bg-text/10 text-text/40'
+                          : 'border border-red-400/40 text-red-300 hover:bg-red-400/10 active:scale-[0.97]'
+                      }`}
+                    >
+                      Revoke
+                    </button>
+                    {reason && (
+                      <p className="mt-2 max-w-md font-body text-xs text-text/50">{reason}</p>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+
+          <p className="mt-6 font-body text-xs text-text/40">
+            {listNote ?? 'Latest policy per session key, with revocation overlaid.'}
+            {asOfBlock != null && <> Indexer at block {asOfBlock.toLocaleString()}.</>}
+          </p>
+        </>
       )}
 
-      {/* Confirm dialog — plain words, no jargon */}
+      {/* Confirm dialog — plain words, no jargon (design standard: AlertDialog
+          anatomy for destructive actions; undo path = a new key can be issued) */}
       <AnimatePresence>
         {confirmKey && (
           <motion.div
@@ -554,7 +556,7 @@ export default function SessionKeys({ accountAddress, connectedAddress }: Sessio
               <h2 className="font-display text-2xl font-bold">Revoke this hall pass?</h2>
               <p className="mt-3 font-body text-sm leading-relaxed text-ink/70">
                 This immediately stops the agent from spending with{' '}
-                <span className="font-mono font-semibold">{truncate(confirmKey.sessionKey)}</span>.
+                <span className="font-mono font-semibold">{truncate(confirmKey.sessionKey ?? undefined)}</span>.
                 Anything left in your account stays there — revoking moves no money. This can't be
                 undone; to give the agent access again you'll need a new key.
               </p>

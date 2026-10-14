@@ -1,46 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
 
 /* ============================================================================
  * Activity — every spend attempt on one smart account.
- * - Rows come ONLY from GET /api/accounts/{address}/activity (indexer cache of
- *   chain events + relay-observed reverts). Nothing is invented.
- * - Allowed rows: green/amber "Allowed — 0.5 USDC to 0x…".
- * - Blocked rows: red "Blocked — tried X, cap Y" with WHY in human words and
- *   exactly how to fix it. Their source ("observed attempt", never an
- *   on-chain event) is labelled honestly — money never moved.
+ * - Rows come ONLY from GET /api/activity?account=&page=&limit= (indexer
+ *   cache of chain events + relay-observed reverts). Nothing is invented.
+ * - The backend ships each row with a human `headline` and `detail`; the
+ *   frontend adds the plain-words FIX derived from the backend's own
+ *   sentence. Blocked rows always state that nothing was spent.
+ * - Filters are client-side over loaded rows (the API has no kind filter);
+ *   counts describe what is loaded, not the whole history.
  * ========================================================================== */
 
 const EXPLORER_TX = 'https://explorer.arc.io/tx/'
-const API_BASE: string =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || ''
-const PAGE_LIMIT = 50
+const API_BASE: string = import.meta.env.VITE_API_BASE_URL || ''
+const PAGE_LIMIT = 25
 
-type ActivityKind = 'allowed' | 'blocked'
 type Filter = 'all' | 'allowed' | 'blocked'
 
-interface ActivityRow {
-  kind: ActivityKind
-  source?: 'on_chain_event' | 'observed_revert'
-  sessionKey?: string
-  to?: string
-  amountWei?: string
-  amountUsdc?: string
-  windowUsedWei?: string
-  windowUsedUsdc?: string
-  policyHash?: string
-  txHash?: string
-  blockNumber?: number
-  logIndex?: number
-  reason?: string
-  attemptedWei?: string
-  attemptedUsdc?: string
-  capWei?: string
-  capUsdc?: string
-  plainLanguage?: string
+interface ApiItem {
+  allowed: boolean
+  headline: string
+  detail: string
+  account: string
+  sessionKey: string | null
+  to: string | null
+  amount: { raw: string; formatted: string; unit: string } | null
+  tx: string
+  txUrl: string
+  block: number
 }
 
 type LoadState = 'loading' | 'ready' | 'error'
@@ -58,23 +49,26 @@ function truncate(addr?: string, head = 6, tail = 4): string {
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`
 }
 
-function weiToUsdc(wei?: string): string {
-  if (!wei) return '0'
-  try {
-    const v = BigInt(wei)
-    const unit = 1_000_000_000_000_000_000n
-    const whole = v / unit
-    let frac = (v % unit).toString().padStart(18, '0').slice(0, 6)
-    frac = frac.replace(/0+$/, '')
-    return frac ? `${whole}.${frac}` : `${whole}`
-  } catch {
-    return '0'
-  }
+/** Plain-words fix derived from the backend's own human sentence. */
+function fixForBlocked(detail: string): string {
+  const d = detail.toLowerCase()
+  if (d.includes('per-payment cap'))
+    return 'Raise the per-payment cap, or split the payment into smaller pieces.'
+  if (d.includes('rolling-window budget'))
+    return 'Raise the window cap, or wait for the window to reset.'
+  if (d.includes('not on the allowlist'))
+    return 'Add the recipient to the allowlist, or use a key with an open destination list.'
+  if (d.includes('has expired'))
+    return 'Extend the expiry, or register a new session key in the policy editor.'
+  if (d.includes('was revoked'))
+    return "Create a new session key — a revoked key can't be brought back."
+  return 'Check the bounds set for this key in the policy editor.'
 }
 
-function usdcDisplay(display?: string, wei?: string): string {
-  if (display && display.trim() !== '') return display
-  return weiToUsdc(wei)
+function cleanHeadline(item: ApiItem): string {
+  // Backend blocked headlines start with "BLOCKED: " — the card already
+  // carries the blocked styling, so the shout is redundant.
+  return item.headline.replace(/^BLOCKED:\s*/i, '')
 }
 
 /* ------------------------------ primitives -------------------------------- */
@@ -110,24 +104,6 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   )
 }
 
-function SourceBadge({ source }: { source?: string }) {
-  if (source === 'observed_revert') {
-    return (
-      <span
-        title="This attempt never reached the chain — it was stopped before any money moved. The record comes from the relay, not an on-chain event."
-        className="inline-flex cursor-help items-center rounded-full border border-text/15 bg-text/5 px-2.5 py-0.5 font-body text-[11px] text-text/60"
-      >
-        Observed attempt — not on-chain
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center rounded-full border border-amber/25 bg-amber/10 px-2.5 py-0.5 font-body text-[11px] text-amber">
-      On-chain record
-    </span>
-  )
-}
-
 function RowSkeleton() {
   return (
     <div className="animate-pulse rounded-2xl border border-text/10 bg-text/[0.03] p-5" aria-hidden="true">
@@ -142,84 +118,27 @@ function RowSkeleton() {
   )
 }
 
-/* ------------------------- blocked-reason decoding ------------------------ */
-/* Primary source is the API's `plainLanguage` (the indexer decodes the plugin's
- * custom errors). This map is the honest fallback for a reason code we know. */
-
-interface DecodedReason {
-  why: string
-  fix: string
-}
-
-const REASON_DECODE: Record<string, DecodedReason> = {
-  PerTxCapExceeded: {
-    why: 'it exceeds the per-payment cap',
-    fix: 'raise the per-payment cap, or split the payment into smaller pieces',
-  },
-  WindowCapExceeded: {
-    why: 'it exceeds the spending-window cap',
-    fix: 'raise the window cap, or wait for the window to reset',
-  },
-  NotAllowlisted: {
-    why: "the recipient isn't on this key's allowed list",
-    fix: 'add the recipient to the allowlist, or use a key with an open destination list',
-  },
-  SessionExpired: {
-    why: 'the hall pass has expired',
-    fix: 'extend the expiry in the policy editor',
-  },
-  SessionRevoked: {
-    why: 'this session key was revoked',
-    fix: "create a new session key — a revoked key can't be brought back",
-  },
-}
-
-function decodeReason(row: ActivityRow): { why: string; fix: string } {
-  if (row.plainLanguage && row.plainLanguage.trim() !== '') {
-    // API-provided human sentence; fix appended from the decoded map when known.
-    const mapped = row.reason ? REASON_DECODE[row.reason] : undefined
-    return {
-      why: row.plainLanguage,
-      fix: mapped ? `How to fix: ${mapped.fix}.` : '',
-    }
-  }
-  const mapped = row.reason ? REASON_DECODE[row.reason] : undefined
-  if (mapped) return { why: mapped.why, fix: `How to fix: ${mapped.fix}.` }
-  return {
-    why: 'the hall pass said no',
-    fix: 'How to fix: check the bounds set for this key in the policy editor.',
-  }
-}
-
 /* --------------------------------- page ----------------------------------- */
 
 export default function Activity({ accountAddress }: ActivityProps) {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const account = accountAddress ?? searchParams.get('account') ?? ''
 
   const [filter, setFilter] = useState<Filter>('all')
   const [keyFilter, setKeyFilter] = useState<string>('all')
-  const [rows, setRows] = useState<ActivityRow[]>([])
+  const [items, setItems] = useState<ApiItem[]>([])
   const [state, setState] = useState<LoadState>('loading')
   const [errorDetail, setErrorDetail] = useState('')
-  const [hasMore, setHasMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [beforeCursor, setBeforeCursor] = useState<string | null>(null)
+  const [asOfBlock, setAsOfBlock] = useState<number | null>(null)
+  const [feedNote, setFeedNote] = useState<string | null>(null)
 
-  const buildUrl = useCallback(
-    (before?: string | null) => {
-      const q = new URLSearchParams()
-      if (filter !== 'all') q.set('filter', filter)
-      if (keyFilter !== 'all') q.set('sessionKey', keyFilter)
-      q.set('limit', String(PAGE_LIMIT))
-      if (before) q.set('before', before)
-      return `${API_BASE}/api/accounts/${account}/activity?${q.toString()}`
-    },
-    [account, filter, keyFilter],
-  )
-
-  const load = useCallback(
-    async (append: boolean) => {
+  const loadPage = useCallback(
+    async (pageNum: number, append: boolean) => {
       if (!account) return
       if (append) setLoadingMore(true)
       else {
@@ -227,24 +146,31 @@ export default function Activity({ accountAddress }: ActivityProps) {
         setErrorDetail('')
       }
       try {
-        const res = await fetch(buildUrl(append ? beforeCursor : null))
-        if (res.status === 404) {
-          setRows([])
-          setState('ready')
-          setHasMore(false)
-          return
+        const q = new URLSearchParams({
+          account,
+          page: String(pageNum),
+          limit: String(PAGE_LIMIT),
+        })
+        const res = await fetch(`${API_BASE}/api/activity?${q.toString()}`)
+        if (!res.ok) {
+          let detail = `API responded ${res.status}`
+          try {
+            const body = await res.json()
+            if (body?.error?.message) detail = `${detail}: ${body.error.message}`
+          } catch {
+            /* keep status-only detail */
+          }
+          throw new Error(detail)
         }
-        if (!res.ok) throw new Error(`API responded ${res.status}`)
-        const data = await res.json()
-        const list: ActivityRow[] = Array.isArray(data.rows) ? data.rows : []
-        setRows((prev) => (append ? [...prev, ...list] : list))
-        setHasMore(list.length === PAGE_LIMIT)
-        const last = list[list.length - 1]
-        setBeforeCursor(
-          last && last.blockNumber != null && last.logIndex != null
-            ? `${last.blockNumber}:${last.logIndex}`
-            : null,
-        )
+        const body = await res.json()
+        const list: ApiItem[] = Array.isArray(body?.data?.items) ? body.data.items : []
+        const pg = body?.data?.pagination
+        setItems((prev) => (append ? [...prev, ...list] : list))
+        setPage(typeof pg?.page === 'number' ? pg.page : pageNum)
+        setPages(typeof pg?.pages === 'number' ? pg.pages : pageNum)
+        setTotal(typeof pg?.total === 'number' ? pg.total : list.length)
+        setAsOfBlock(typeof body?.asOfBlock === 'number' ? body.asOfBlock : null)
+        setFeedNote(typeof body?.data?.note === 'string' ? body.data.note : null)
         setState('ready')
       } catch (e: any) {
         setErrorDetail(e?.message ?? 'Network error')
@@ -253,32 +179,41 @@ export default function Activity({ accountAddress }: ActivityProps) {
         setLoadingMore(false)
       }
     },
-    [account, buildUrl, beforeCursor],
+    [account],
   )
 
-  // Refetch whenever the account or filters change (filters are server-side).
+  // Fresh load whenever the account changes.
   useEffect(() => {
-    setBeforeCursor(null)
-    setHasMore(false)
-    void load(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, filter, keyFilter])
+    setItems([])
+    setPage(1)
+    setPages(1)
+    void loadPage(1, false)
+  }, [account, loadPage])
 
   const sessionKeys = useMemo(() => {
     const set = new Set<string>()
-    for (const r of rows) if (r.sessionKey) set.add(r.sessionKey)
+    for (const r of items) if (r.sessionKey) set.add(r.sessionKey)
     return [...set].sort()
-  }, [rows])
+  }, [items])
+
+  const visible = useMemo(() => {
+    return items.filter((r) => {
+      if (filter === 'allowed' && !r.allowed) return false
+      if (filter === 'blocked' && r.allowed) return false
+      if (keyFilter !== 'all' && r.sessionKey !== keyFilter) return false
+      return true
+    })
+  }, [items, filter, keyFilter])
 
   const counts = useMemo(() => {
     let allowed = 0
     let blocked = 0
-    for (const r of rows) {
-      if (r.kind === 'allowed') allowed += 1
+    for (const r of items) {
+      if (r.allowed) allowed += 1
       else blocked += 1
     }
     return { allowed, blocked }
-  }, [rows])
+  }, [items])
 
   if (!account) {
     return (
@@ -288,7 +223,7 @@ export default function Activity({ accountAddress }: ActivityProps) {
           title="No account selected"
           description="Pick one of your smart accounts first — activity is tracked per account."
           actionLabel="Go to my accounts"
-          onAction={() => (window.location.href = '/app/accounts')}
+          onAction={() => navigate('/app/accounts')}
         />
       </div>
     )
@@ -298,7 +233,12 @@ export default function Activity({ accountAddress }: ActivityProps) {
     <div>
       <PageHeader account={account} />
 
-      {/* Filters — applied server-side via query params */}
+      <p className="mb-4 font-body text-xs text-text/40">
+        Allowed rows are on-chain events; blocked rows are attempts the relay observed before any
+        money moved. Nothing blocked ever left your account.
+      </p>
+
+      {/* Filters — client-side over loaded rows */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex rounded-full border border-text/15 bg-text/[0.03] p-1" role="tablist" aria-label="Filter activity">
           {(['all', 'allowed', 'blocked'] as Filter[]).map((f) => (
@@ -332,6 +272,10 @@ export default function Activity({ accountAddress }: ActivityProps) {
             ))}
           </select>
         </label>
+
+        <span className="font-body text-xs text-text/40">
+          {total > 0 ? `${total} total · ${items.length} loaded` : 'Loading…'}
+        </span>
       </div>
 
       {state === 'loading' && (
@@ -349,46 +293,62 @@ export default function Activity({ accountAddress }: ActivityProps) {
           message="The feed comes from the indexer, and it didn't answer. Your on-chain history is unaffected — this is just a display problem."
           technicalDetail={errorDetail || undefined}
           retryLabel="Try again"
-          onRetry={() => void load(false)}
+          onRetry={() => void loadPage(1, false)}
         />
       )}
 
-      {state === 'ready' && rows.length === 0 && (
+      {state === 'ready' && items.length === 0 && (
         <EmptyState
           title="No activity yet"
           description={
-            filter === 'blocked'
-              ? 'Nothing has been blocked yet. When the hall pass stops a spend, the reason and the fix show up here.'
-              : filter === 'allowed'
-                ? 'No spends yet. When your agent spends within its bounds, each one shows up here.'
-                : 'Nothing here yet. When your agent spends — or when the hall pass stops it — it shows up here.'
+            feedNote ??
+            'Nothing here yet. When your agent spends — or when the hall pass stops it — it shows up here.'
           }
           actionLabel="Review session keys"
-          onAction={() => (window.location.href = `/app/session-keys?account=${account}`)}
+          onAction={() => navigate(`/app/session-keys?account=${account}`)}
         />
       )}
 
-      {state === 'ready' && rows.length > 0 && (
+      {state === 'ready' && items.length > 0 && visible.length === 0 && (
+        <EmptyState
+          title={filter === 'blocked' ? 'Nothing blocked' : filter === 'allowed' ? 'No allowed spends' : 'No matches'}
+          description={
+            filter === 'blocked'
+              ? 'Nothing has been blocked in the loaded activity. When the hall pass stops a spend, the reason and the fix show up here.'
+              : 'No rows match the current filters in the loaded activity. Try widening them, or load older rows.'
+          }
+          actionLabel="Clear filters"
+          onAction={() => {
+            setFilter('all')
+            setKeyFilter('all')
+          }}
+        />
+      )}
+
+      {state === 'ready' && visible.length > 0 && (
         <div className="flex flex-col gap-3">
-          {rows.map((row, i) => (
-            <ActivityCard key={`${row.txHash ?? 'row'}-${row.blockNumber ?? 0}-${row.logIndex ?? i}`} row={row} index={i} />
+          {visible.map((item, i) => (
+            <ActivityCard
+              key={`${item.tx}-${item.block}-${i}`}
+              item={item}
+              index={i}
+            />
           ))}
 
-          {hasMore && (
+          {page < pages && (
             <button
               type="button"
-              disabled={loadingMore || !beforeCursor}
-              onClick={() => void load(true)}
+              disabled={loadingMore}
+              onClick={() => void loadPage(page + 1, true)}
               className="mx-auto mt-2 rounded-full border border-text/20 px-6 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber/60 hover:text-amber disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loadingMore ? 'Loading…' : 'Show older activity'}
+              {loadingMore ? 'Loading…' : `Show older activity (page ${page + 1} of ${pages})`}
             </button>
           )}
-          {hasMore && !beforeCursor && (
-            <p className="text-center font-body text-xs text-text/40">
-              The feed didn't provide a position for older rows — showing the latest {rows.length}.
-            </p>
-          )}
+          <p className="text-center font-body text-xs text-text/40">
+            {feedNote ?? 'Latest first.'}
+            {asOfBlock != null && <> Indexer at block {asOfBlock.toLocaleString()}.</>}
+          </p>
         </div>
       )}
     </div>
@@ -397,13 +357,12 @@ export default function Activity({ accountAddress }: ActivityProps) {
 
 /* --------------------------------- rows ----------------------------------- */
 
-function ActivityCard({ row, index }: { row: ActivityRow; index: number }) {
-  if (row.kind === 'blocked') return <BlockedCard row={row} index={index} />
-  return <AllowedCard row={row} index={index} />
+function ActivityCard({ item, index }: { item: ApiItem; index: number }) {
+  if (!item.allowed) return <BlockedCard item={item} index={index} />
+  return <AllowedCard item={item} index={index} />
 }
 
-function AllowedCard({ row, index }: { row: ActivityRow; index: number }) {
-  const amount = usdcDisplay(row.amountUsdc, row.amountWei)
+function AllowedCard({ item, index }: { item: ApiItem; index: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -412,44 +371,25 @@ function AllowedCard({ row, index }: { row: ActivityRow; index: number }) {
       className="rounded-2xl border border-amber/20 bg-text/[0.03] p-4 sm:p-5"
     >
       <div className="flex items-start gap-3.5">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-amber">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-amber" aria-hidden="true">
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 12.5l5 5L20 6.5" />
           </svg>
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-body text-sm font-semibold text-text sm:text-base">
-            Allowed — {amount} USDC to{' '}
-            <span className="font-mono font-medium">{truncate(row.to)}</span>
-            {row.to && <CopyButton value={row.to} label="recipient address" />}
+            <span className="text-amber">Allowed</span> — {cleanHeadline(item)}
           </p>
-          <p className="mt-1 font-body text-xs text-text/50 sm:text-sm">
-            Within policy
-            {row.windowUsedUsdc || row.windowUsedWei ? (
-              <>
-                {' '}· {usdcDisplay(row.windowUsedUsdc, row.windowUsedWei)} USDC used in the window after this spend
-              </>
-            ) : null}
-            {row.sessionKey ? (
-              <>
-                {' '}· key <span className="font-mono">{truncate(row.sessionKey)}</span>
-                <CopyButton value={row.sessionKey} label="session key address" />
-              </>
-            ) : null}
-          </p>
-          <RowFooter row={row} />
+          <p className="mt-1 font-body text-xs text-text/50 sm:text-sm">{item.detail}</p>
+          <RowFooter item={item} />
         </div>
       </div>
     </motion.div>
   )
 }
 
-function BlockedCard({ row, index }: { row: ActivityRow; index: number }) {
-  const { why, fix } = decodeReason(row)
-  const attempted = usdcDisplay(row.attemptedUsdc, row.attemptedWei)
-  const cap = row.capUsdc || row.capWei ? usdcDisplay(row.capUsdc, row.capWei) : null
-  const isPlain = !!(row.plainLanguage && row.plainLanguage.trim() !== '')
-
+function BlockedCard({ item, index }: { item: ApiItem; index: number }) {
+  const fix = fixForBlocked(item.detail)
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -458,75 +398,51 @@ function BlockedCard({ row, index }: { row: ActivityRow; index: number }) {
       className="rounded-2xl border border-red-400/25 bg-red-400/[0.04] p-4 sm:p-5"
     >
       <div className="flex items-start gap-3.5">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-400/15 text-red-300">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-400/15 text-red-300" aria-hidden="true">
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-body text-sm font-semibold text-text sm:text-base">
-            Blocked — {attempted} USDC{row.to ? (
-              <>
-                {' '}to <span className="font-mono font-medium">{truncate(row.to)}</span>
-                <CopyButton value={row.to} label="recipient address" />
-              </>
-            ) : null}
+            <span className="text-red-300">Blocked</span> — {cleanHeadline(item)}
           </p>
           <p className="mt-1.5 font-body text-xs text-red-200/90 sm:text-sm">
-            <span className="font-semibold">Why:</span>{' '}
-            {isPlain ? (
-              why
-            ) : (
-              <>
-                {why}
-                {row.attemptedUsdc || row.attemptedWei ? ` (tried ${attempted}` : ''}
-                {cap ? `, cap ${cap}` : ''}
-                {(row.attemptedUsdc || row.attemptedWei) && ')'}.{' '}
-                <span className="text-text/60">Nothing was spent.</span>
-              </>
-            )}
+            <span className="font-semibold">Why:</span> {item.detail}
           </p>
-          {fix && (
-            <p className="mt-1 font-body text-xs text-text/60 sm:text-sm">
-              <span className="font-semibold text-amber">How to fix:</span> {fix.replace(/^How to fix:\s*/i, '')}
-            </p>
-          )}
-          {row.sessionKey && (
-            <p className="mt-1 font-body text-xs text-text/50">
-              Key <span className="font-mono">{truncate(row.sessionKey)}</span>
-              <CopyButton value={row.sessionKey} label="session key address" />
-            </p>
-          )}
-          <RowFooter row={row} />
+          <p className="mt-1 font-body text-xs text-text/60 sm:text-sm">
+            <span className="font-semibold text-amber">How to fix:</span> {fix}
+          </p>
+          <RowFooter item={item} />
         </div>
       </div>
     </motion.div>
   )
 }
 
-function RowFooter({ row }: { row: ActivityRow }) {
+function RowFooter({ item }: { item: ApiItem }) {
   return (
     <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <SourceBadge source={row.source} />
-      {row.blockNumber != null && (
-        <span className="font-body text-[11px] text-text/40">Block {row.blockNumber.toLocaleString()}</span>
+      {item.sessionKey && (
+        <span className="font-body text-[11px] text-text/50">
+          Key <span className="font-mono">{truncate(item.sessionKey)}</span>
+          <CopyButton value={item.sessionKey} label="session key address" />
+        </span>
       )}
-      {row.txHash && (
+      {item.block != null && (
+        <span className="font-body text-[11px] text-text/40">Block {item.block.toLocaleString()}</span>
+      )}
+      {item.tx && (
         <span className="font-body text-[11px]">
           <a
-            href={`${EXPLORER_TX}${row.txHash}`}
+            href={item.txUrl || `${EXPLORER_TX}${item.tx}`}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-text/50 underline decoration-dotted underline-offset-4 transition-colors hover:text-amber"
           >
-            {truncate(row.txHash, 10, 6)}
+            {truncate(item.tx, 10, 6)}
           </a>
-          <CopyButton value={row.txHash} label="transaction hash" />
-        </span>
-      )}
-      {row.reason && !row.plainLanguage && (
-        <span className="font-mono text-[11px] text-text/30" title="On-chain revert reason">
-          {row.reason}
+          <CopyButton value={item.tx} label="transaction hash" />
         </span>
       )}
     </div>

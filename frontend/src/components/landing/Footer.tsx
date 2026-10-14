@@ -1,30 +1,33 @@
 /**
- * Footer — minimal, honest. Real links only: the Arc explorer. No socials,
- * no invented URLs. Contract references point at their explorer addresses.
+ * Footer — a sign-off, not a link farm (design-standard §6).
+ * Pattern: one mixed-case line → made-by line → ≤3 minimal links.
+ * Cream band per the §9 HALLPASS tokens.
+ *
+ * Links are real only: the Arc explorer and the two proven contracts.
+ * No socials, no invented URLs.
  */
 
 const TOKENS = {
-  bg: "#0C0B0A",
-  amber: "#FFB224",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.5)",
-  border: "rgba(255,178,36,0.15)",
+  cream: "#FAF6EE",
+  ink: "#121110",
+  amber: "#B07A00",
+  muted: "rgba(18,17,16,0.55)",
 };
 
 const EXPLORER = "https://explorer.arc.io";
 
-const CONTRACTS = [
+const LINKS = [
   {
-    name: "HallpassMinimalPlugin",
-    address: "0x5780e3DEd211ee13494909432C89Be7b8D6441A3",
+    label: "Arc explorer",
+    href: EXPLORER,
   },
   {
-    name: "SigGate (typed-data guard)",
-    address: "0x202034589739214Dd4daC17C66FCf53e875B6531",
+    label: "Hallpass plugin",
+    href: `${EXPLORER}/address/0x5780e3DEd211ee13494909432C89Be7b8D6441A3`,
   },
   {
-    name: "Policy-bound account (MSCA)",
-    address: "0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a",
+    label: "SigGate contract",
+    href: `${EXPLORER}/address/0x202034589739214Dd4daC17C66FCf53e875B6531`,
   },
 ];
 
@@ -32,121 +35,69 @@ export default function Footer() {
   return (
     <footer
       style={{
-        background: TOKENS.bg,
-        color: TOKENS.textDark,
-        padding: "56px 24px 32px",
-        borderTop: `1px solid ${TOKENS.border}`,
+        background: TOKENS.cream,
+        color: TOKENS.ink,
+        padding: "72px 24px 36px",
+        textAlign: "center",
       }}
     >
-      <div
-        style={{
-          maxWidth: 1080,
-          margin: "0 auto",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 40,
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ maxWidth: 340 }}>
-          <p style={{ fontWeight: 800, fontSize: 20, margin: "0 0 10px" }}>
-            HALLPASS
-          </p>
-          <p style={{ color: TOKENS.muted, fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-            Scoped session keys for AI agents — enforced on-chain by an
-            ERC-6900 plugin on Arc mainnet.
-          </p>
-        </div>
-
-        <div>
-          <p
-            style={{
-              fontSize: 13,
-              textTransform: "uppercase",
-              letterSpacing: "0.16em",
-              color: TOKENS.amber,
-              fontWeight: 700,
-              margin: "0 0 12px",
-            }}
-          >
-            Contracts
-          </p>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {CONTRACTS.map((c) => (
-              <li key={c.address} style={{ marginBottom: 8 }}>
-                <a
-                  href={`${EXPLORER}/address/${c.address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    color: TOKENS.muted,
-                    fontSize: 14,
-                    textDecoration: "none",
-                  }}
-                >
-                  {c.name} ↗
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div>
-          <p
-            style={{
-              fontSize: 13,
-              textTransform: "uppercase",
-              letterSpacing: "0.16em",
-              color: TOKENS.amber,
-              fontWeight: 700,
-              margin: "0 0 12px",
-            }}
-          >
-            Project
-          </p>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            <li style={{ marginBottom: 8 }}>
-              <a
-                href="#live-proof"
-                style={{ color: TOKENS.muted, fontSize: 14, textDecoration: "none" }}
-              >
-                Live proof
-              </a>
-            </li>
-            <li style={{ marginBottom: 8 }}>
-              <a
-                href="#faq"
-                style={{ color: TOKENS.muted, fontSize: 14, textDecoration: "none" }}
-              >
-                FAQ
-              </a>
-            </li>
-            <li style={{ marginBottom: 8 }}>
-              <a
-                href={EXPLORER}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: TOKENS.muted, fontSize: 14, textDecoration: "none" }}
-              >
-                Arc explorer ↗
-              </a>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <div
-        style={{
-          maxWidth: 1080,
-          margin: "40px auto 0",
-          paddingTop: 24,
-          borderTop: "1px solid rgba(255,249,239,0.08)",
-        }}
-      >
-        <p style={{ color: TOKENS.muted, fontSize: 13, margin: 0 }}>
-          Every address and transaction hash on this page is a real Arc
-          mainnet (chain 5042) record. Nothing here is a demo, mock, or
-          placeholder.
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <p
+          style={{
+            fontSize: "clamp(28px, 4.5vw, 44px)",
+            fontWeight: 800,
+            lineHeight: 1.15,
+            letterSpacing: "-0.01em",
+            margin: "0 0 8px",
+          }}
+        >
+          THANKS for
+          <br />
+          stopping by.
+        </p>
+        <p
+          style={{
+            fontSize: 20,
+            fontWeight: 700,
+            margin: "0 0 28px",
+          }}
+        >
+          The list is closed.
+        </p>
+        <nav
+          style={{
+            display: "flex",
+            gap: 24,
+            justifyContent: "center",
+            flexWrap: "wrap",
+            marginBottom: 32,
+          }}
+        >
+          {LINKS.map((l) => (
+            <a
+              key={l.label}
+              href={l.href}
+              target={l.href.startsWith("http") ? "_blank" : undefined}
+              rel={l.href.startsWith("http") ? "noopener noreferrer" : undefined}
+              style={{
+                color: TOKENS.ink,
+                fontSize: 15,
+                fontWeight: 600,
+                textDecoration: "none",
+                borderBottom: `2px solid ${TOKENS.amber}`,
+                paddingBottom: 2,
+              }}
+            >
+              {l.label} ↗
+            </a>
+          ))}
+        </nav>
+        <p style={{ color: TOKENS.muted, fontSize: 14, margin: "0 0 6px" }}>
+          Made for the Arc builder community © 2026.
+        </p>
+        <p style={{ color: TOKENS.muted, fontSize: 12.5, margin: 0 }}>
+          *every address and transaction hash on this page is a real Arc mainnet
+          record — nothing here is a demo, mock, or placeholder.
         </p>
       </div>
     </footer>

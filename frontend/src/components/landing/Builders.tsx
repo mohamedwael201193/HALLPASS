@@ -4,6 +4,9 @@
  * address and manifest hash below are the proven mainnet deployment.
  */
 
+import { motion } from "framer-motion";
+import { useHidden, EASE_OUT } from "./reveal";
+
 const TOKENS = {
   bg: "#121110",
   amber: "#FFB224",
@@ -29,11 +32,18 @@ account.installPlugin(
 // claims validation slots another plugin already owns.`;
 
 export default function Builders() {
+  const hidden = useHidden(40);
   return (
     <section
       style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "96px 24px" }}
     >
-      <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+      <motion.div
+        initial={hidden}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={{ duration: 0.7, ease: EASE_OUT }}
+        style={{ maxWidth: 1080, margin: "0 auto" }}
+      >
         <p
           style={{
             color: TOKENS.amber,
@@ -90,12 +100,13 @@ export default function Builders() {
             href="#live-proof"
             style={{
               display: "inline-block",
-              background: TOKENS.amber,
-              color: "#121110",
+              background: "transparent",
+              color: TOKENS.amber,
               fontWeight: 700,
               padding: "12px 24px",
               borderRadius: 10,
               textDecoration: "none",
+              border: `2px solid ${TOKENS.amber}`,
             }}
           >
             See the proof on-chain
@@ -105,7 +116,7 @@ export default function Builders() {
             bible (the project&rsquo;s technical reference).
           </p>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

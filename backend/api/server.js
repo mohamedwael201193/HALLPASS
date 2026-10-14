@@ -28,7 +28,17 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { ethers } = require("ethers");
-const Database = require("better-sqlite3");
+// better-sqlite3 is native; if it cannot load (e.g. no build toolchain on a
+// fresh host), the API stays up and answers honestly instead of crashing.
+let Database = null;
+try {
+  Database = require("better-sqlite3");
+} catch (e) {
+  console.error(
+    "WARN: better-sqlite3 failed to load — indexer-cache endpoints will report unavailable. " +
+      e.message
+  );
+}
 
 // ---------- public configuration ----------
 // All public on-chain facts (RPC-verified on Arc mainnet, 2026-10-14).
@@ -51,8 +61,14 @@ const DB_PATH =
   process.env.DB_PATH || path.resolve(__dirname, "../indexer/db.sqlite");
 
 let db = null;
+let dbLoadError = null;
 function openDb() {
   if (db) return db;
+  if (!Database) {
+    throw new Error(
+      "better-sqlite3 is not available in this runtime, so the indexer cache cannot be read."
+    );
+  }
   db = new Database(DB_PATH, { readonly: true, fileMustExist: false });
   db.pragma("journal_mode = WAL");
   return db;
@@ -90,7 +106,7 @@ function getProvider() {
 }
 // ERC-6900 IPluginManager: getInstalledPlugins() -> (address[], bytes32[])
 const PLUGIN_MANAGER_ABI = [
-  "function getInstalledPlugins() view returns (address[] plugins, bytes32[] manifestHashes)",
+  "function getInstalledPlugins() view returns (address[] plugins)",
 ];
 const pluginManagerIface = new ethers.Interface(PLUGIN_MANAGER_ABI);
 
@@ -109,12 +125,13 @@ function apiError(res, status, code, message, extra) {
   });
 }
 
-// Human-readable activity description. Amounts are formatted as Arc USDC
-// (6 decimals) — the asset the policy layer prices in — while the raw wei
-// string is always included so nothing is misrepresented.
+// Human-readable activity description. Policy amounts are NATIVE wei
+// (18 decimals — the native gas USDC; build bible §4.2), so they format
+// with 18 decimals; the raw wei string is always included so nothing is
+// misrepresented. (ARC_USDC_DECIMALS=6 is the ERC-20 token only.)
 function fmtAmount(raw) {
   try {
-    return ethers.formatUnits(BigInt(raw), ARC_USDC_DECIMALS);
+    return ethers.formatUnits(BigInt(raw), 18);
   } catch {
     return raw;
   }
@@ -165,6 +182,10 @@ function describeActivity(row) {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// GET /api/stats — landing-page live stats: real SQL over the indexer DB
+// (zeros + source="indexer-unavailable" when the indexer hasn't run).
+app.use("/api", require("./stats"));
 
 // GET /health — liveness + chain + indexer visibility.
 app.get("/health", async (req, res) => {
@@ -222,13 +243,12 @@ app.get("/api/accounts/:address/plugins", async (req, res) => {
           data: pluginManagerIface.encodeFunctionData("getInstalledPlugins"),
         }),
       ]);
-      const [plugins, manifestHashes] = pluginManagerIface.decodeFunctionResult(
+      const [plugins] = pluginManagerIface.decodeFunctionResult(
         "getInstalledPlugins",
         raw
       );
-      const list = plugins.map((p, i) => ({
+      const list = plugins.map((p) => ({
         plugin: ethers.getAddress(p),
-        manifestHash: manifestHashes[i],
         isHallpassPlugin:
           ethers.getAddress(p).toLowerCase() === PLUGIN_ADDRESS.toLowerCase(),
       }));
@@ -387,7 +407,7 @@ app.get("/api/accounts/:address/policies", async (req, res) => {
           note:
             sessions.length === 0
               ? "No session policies indexed for this account yet."
-              : "Latest policy per session key, with revocation overlaid. Amounts formatted as Arc USDC (6 decimals); raw wei included.",
+              : "Latest policy per session key, with revocation overlaid. Amounts formatted as native USDC (18 decimals); raw wei included.",
         },
       })
     );

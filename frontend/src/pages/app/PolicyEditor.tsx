@@ -80,7 +80,7 @@ const addressEntrySchema = z.object({
     .trim()
     .min(1, 'Paste the destination address here.')
     .refine(
-      (v) => isAddress(v),
+      (v: string): boolean => isAddress(v),
       'That address doesn’t look right — it should start with 0x and be 42 characters long.',
     ),
   label: z.string(),

@@ -1,15 +1,17 @@
 // HALLPASS stats API — landing-page live stats from the chain indexer.
 //
-// MOUNT (server.js — do NOT edit server.js; the backend owner adds this one line):
-//   app.use('/api', require('./api/stats'));
+// Mount (server.js adds this one line):
+//   app.use('/api', require('./stats'));
 // That exposes GET /api/stats. The router also accepts an options object:
-//   app.use('/api', require('./api/stats')({ dbPath: '/abs/path/to/db.sqlite' }));
-//
-// DEPENDENCY (backend owner adds to package.json): better-sqlite3 ^11
+//   app.use('/api', require('./stats')({ dbPath: '/abs/path/to/db.sqlite' }));
 //
 // HARD RULES: no mock data, no invented numbers. Every count is a real SQL
-// aggregate over the indexer DB. Empty/missing DB -> zeros with
-// source = "indexer-unavailable" (never a fake number).
+// aggregate over the indexer DB (tables written by backend/indexer/index.js:
+// plugin_installs, policy_updates, validation_results, revokes, indexer_state).
+// Empty/missing DB -> zeros with source = "indexer-unavailable" (never a fake
+// number). spendsBlocked counts relay-fed denial rows (allowed = 0) — 0 until
+// the relay denial feed lands; the frontend must not present that 0 as
+// "nothing was ever blocked".
 
 const path = require('path');
 
@@ -31,6 +33,7 @@ try {
 function resolveDbPath(explicit) {
   if (explicit) return explicit;
   if (process.env.INDEXER_DB) return process.env.INDEXER_DB;
+  if (process.env.DB_PATH) return process.env.DB_PATH;
   const here = __dirname; // <repo>/backend/api/
   return (
     tryPath(path.join(here, '..', 'indexer', 'db.sqlite')) ||
@@ -49,7 +52,14 @@ function tryPath(p) {
   }
 }
 
-const EXPECTED_TABLES = ['installs', 'policies', 'spends', 'denials', 'revokes'];
+// The exact tables backend/indexer/index.js writes (see indexer/README.md).
+const EXPECTED_TABLES = [
+  'plugin_installs',
+  'policy_updates',
+  'validation_results',
+  'revokes',
+  'indexer_state',
+];
 
 /** table exists? — cheap, no throw. */
 function hasTable(db, name) {
@@ -105,22 +115,40 @@ function computeStats(dbPath) {
 
     const nowSec = Math.floor(Date.now() / 1000);
 
+    // Distinct accounts with at least one indexed install event.
     const pluginsInstalled = safeCount(
       db,
-      'SELECT COUNT(DISTINCT account) AS c FROM installs WHERE uninstalled = 0'
+      'SELECT COUNT(DISTINCT account) AS c FROM plugin_installs'
     );
+    // Distinct accounts with an unexpired policy and no revoke on record.
+    // (PolicyUpdated carries no session key, so revokes are matched at
+    // account level — conservative, documented in STATS.md.)
     const policiesActive = safeCount(
       db,
-      'SELECT COUNT(*) AS c FROM policies WHERE revoked = 0 AND expiry > ?',
+      `SELECT COUNT(DISTINCT account) AS c FROM policy_updates pu
+        WHERE pu.expiry > ?
+          AND NOT EXISTS (
+            SELECT 1 FROM revokes r WHERE LOWER(r.account) = LOWER(pu.account)
+          )`,
       [nowSec]
     );
-    const spendsAllowed = safeCount(db, 'SELECT COUNT(*) AS c FROM spends');
-    const spendsBlocked = safeCount(db, 'SELECT COUNT(*) AS c FROM denials');
+    // SpendAuthorized events (allowed = 1) written by the indexer.
+    const spendsAllowed = safeCount(
+      db,
+      'SELECT COUNT(*) AS c FROM validation_results WHERE allowed = 1'
+    );
+    // Denial rows are relay-fed only (allowed = 0); 0 until the relay lands.
+    const spendsBlocked = safeCount(
+      db,
+      'SELECT COUNT(*) AS c FROM validation_results WHERE allowed = 0'
+    );
     const revokes = safeCount(db, 'SELECT COUNT(*) AS c FROM revokes');
 
     let asOfBlock = null;
     try {
-      const wm = db.prepare("SELECT value FROM meta WHERE key = 'last_block'").get();
+      const wm = db
+        .prepare("SELECT value FROM indexer_state WHERE key = 'last_indexed_block'")
+        .get();
       if (wm && /^\d+$/.test(String(wm.value))) {
         asOfBlock = Number(wm.value);
       } else {
@@ -128,10 +156,10 @@ function computeStats(dbPath) {
         const fb = db
           .prepare(
             `SELECT MAX(b) AS m FROM (
-               SELECT block_number AS b FROM spends
-               UNION ALL SELECT block_number FROM denials
-               UNION ALL SELECT block_number FROM revokes
-               UNION ALL SELECT block_number FROM installs
+               SELECT block AS b FROM plugin_installs
+               UNION ALL SELECT block FROM policy_updates
+               UNION ALL SELECT block FROM validation_results
+               UNION ALL SELECT block FROM revokes
              )`
           )
           .get();
@@ -178,7 +206,7 @@ function createStatsRouter(opts = {}) {
   return router;
 }
 
-// Default export keeps the documented mount line trivial: app.use('/api', require('./api/stats'));
+// Default export keeps the documented mount line trivial: app.use('/api', require('./stats'));
 // Without express (e.g. unit tests), exports the bare helpers instead of a router.
 if (express) {
   module.exports = createStatsRouter();

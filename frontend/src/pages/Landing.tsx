@@ -13,6 +13,7 @@ import Problem from "../components/landing/Problem";
 import Metaphor from "../components/landing/Metaphor";
 import HowItWorks from "../components/landing/HowItWorks";
 import LiveProof from "../components/landing/LiveProof";
+import VibeBreak from "../components/landing/VibeBreak";
 import Features from "../components/landing/Features";
 import Builders from "../components/landing/Builders";
 import Faq from "../components/landing/Faq";
@@ -25,8 +26,6 @@ export default function Landing() {
       style={{
         background: "#121110",
         minHeight: "100vh",
-        fontFamily:
-          "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
       }}
     >
       <Nav />
@@ -35,6 +34,7 @@ export default function Landing() {
       <Metaphor />
       <HowItWorks />
       <LiveProof />
+      <VibeBreak />
       <Features />
       <Builders />
       <Faq />
