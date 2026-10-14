@@ -23,6 +23,8 @@ const ConnectScreen = lazy(() =>
   import('./shells/Screens').then((m) => ({ default: m.ConnectScreen })),
 )
 /** B2 — (b) My accounts: the hall passes on one smart account. */
+const AccountsScreen = lazy(() => import('./pages/app/Accounts'))
+/** B2 — (b2) Session keys: the hall passes on one smart account. */
 const SessionKeysScreen = lazy(() => import('./pages/app/SessionKeys'))
 /** B2 — (c) Plugin marketplace: install/uninstall via real on-chain userOps. */
 const MarketplaceScreen = lazy(() => import('./pages/app/Marketplace'))
@@ -44,7 +46,7 @@ export default function App() {
             {/* (a) Connect — one enormous, obvious connect button (F9, B4) */}
             <Route index element={<ConnectScreen />} />
             {/* (b) My accounts — smart accounts + installed plugins with status */}
-            <Route path="accounts" element={<SessionKeysScreen />} />
+            <Route path="accounts" element={<AccountsScreen />} />
             {/* Session keys — stable deep-link alias (Activity CTAs land here) */}
             <Route path="session-keys" element={<SessionKeysScreen />} />
             {/* (c) Plugin marketplace — install/uninstall via real on-chain userOps */}

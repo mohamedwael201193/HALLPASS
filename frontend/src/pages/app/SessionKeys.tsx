@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { type UseHallpass } from '../../lib/useHallpass'
 import { HallpassGate, WalletDownState } from './shared'
-import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
+import TapeEmptyState, { TapePrimaryAction } from '../../components/TapeEmptyState'
 import TokenIcon from '../../components/TokenIcon'
 
 /* ============================================================================
@@ -199,9 +199,10 @@ function KeySkeleton() {
 /* --------------------------------- page ----------------------------------- */
 
 /**
- * Default export — the wallet gate. useHallpass() throws when the wallet
- * stack isn't ready (no provider yet, or no Reown project id); the boundary
- * turns that into the honest WalletDownState instead of a crash.
+ * Default export — the wallet gate. When the wallet stack isn't ready
+ * (no Reown project id) useHallpass() returns a static DOWN object with
+ * zero hooks called (P1: nothing throws); the gate renders the honest
+ * WalletDownState directly.
  */
 export default function SessionKeys({ accountAddress }: SessionKeysProps) {
   return (
@@ -213,7 +214,6 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
 }
 
 function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHallpass }) {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const account = accountAddress ?? searchParams.get('account') ?? ''
 
@@ -380,11 +380,14 @@ function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHal
     return (
       <div>
         <PageHeader />
-        <EmptyState
-          title="No account selected"
-          description="Pick one of your smart accounts first — session keys live on a specific account."
-          actionLabel="Go to my accounts"
-          onAction={() => navigate('/app/accounts')}
+        <TapeEmptyState
+          title="No account selected."
+          copy="Pick one of your smart accounts first — session keys live on a specific account."
+          action={
+            <TapePrimaryAction to="/app/accounts">
+              Go to my accounts
+            </TapePrimaryAction>
+          }
         />
       </div>
     )
@@ -445,11 +448,15 @@ function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHal
       )}
 
       {state === 'empty' && (
-        <EmptyState
-          title="No session keys yet"
-          description="A session key is a hall pass for your agent: it can spend, but only within the bounds you set. Create one to get started."
-          actionLabel="Set up your first hall pass"
-          onAction={() => navigate(`/app/policy?account=${account}`)}
+        <TapeEmptyState
+          art="key3d"
+          title="No session keys yet — install your first policy to start the tape."
+          copy="A session key is a hall pass for your agent: it can spend, but only within the bounds you set. Create one to get started."
+          action={
+            <TapePrimaryAction to={`/app/policy?account=${account}`}>
+              Set up your first hall pass
+            </TapePrimaryAction>
+          }
         />
       )}
 

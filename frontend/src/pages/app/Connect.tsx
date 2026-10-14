@@ -6,6 +6,7 @@
 
 import { Link } from 'react-router-dom';
 import type { UseHallpass } from '../../lib/useHallpass';
+import { DashedTapeArt } from '../../components/TapeEmptyState';
 import {
   ARC_CHAIN_ID,
   CopyButton,
@@ -38,6 +39,9 @@ function ConnectLive({ hp }: { hp: UseHallpass }) {
   if (!hp.isConnected) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-center py-10 text-center md:py-16">
+        <div className="mb-6 text-amber/80">
+          <DashedTapeArt className="h-24 w-24" label="Connect your wallet" />
+        </div>
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber">
           Step 1 of 1 to start
         </p>

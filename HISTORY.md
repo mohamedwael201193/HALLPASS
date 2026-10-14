@@ -266,3 +266,19 @@ states (stats values, lifecycle cards, aurora band) verified via a
 temporary component preview route (deleted before commit) — the env has no
 VITE_REOWN_PROJECT_ID so the wallet can never connect here. Real token
 icons featured in stats strip + session cards. Mobile 390px verified.
+
+## 2026-10-15 — DESIGN-QA PUNCHLIST (dashboard v2 follow-up)
+- **P1 — zero-throw wallet-down path.** `useHallpass()` now returns a static
+  DOWN object (no wagmi hooks called, nothing thrown) when `VITE_REOWN_PROJECT_ID`
+  is unset; `HallpassGate` renders the fallback/`WalletDownState` directly without
+  mounting the hook-calling inner component. Verified: 0 pageerrors and 0
+  `WagmiProviderNotFoundError` across all /app routes (was 8 errors before).
+- **P2 — relay-style dashed SVG illustrations for all not-connected/no-data
+  empty states** (wallet configured): Accounts, Connect, Session Keys
+  (no account / no keys), Policies (no account), Marketplace (no wallet).
+  SessionKeys/Marketplace moved from the old `EmptyState` to `TapeEmptyState`.
+- **Route fix (pre-existing):** `/app/accounts` was wired to `SessionKeysScreen`
+  (since 97e42b5) — now renders the real `Accounts` screen with the stats strip.
+- Screenshots: `~/workspace/your_files/review-shots/hp-dash-v2-*-nc.png`
+  (configured-but-not-connected, verified with a temporary fake project id;
+  the temp `.env` was deleted afterwards and never committed).

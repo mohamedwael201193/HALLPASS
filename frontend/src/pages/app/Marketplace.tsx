@@ -18,7 +18,7 @@ import PolicyCard, {
 } from '../../components/PolicyCard'
 import TokenIcon, { type TokenKind } from '../../components/TokenIcon'
 import GetEurcPanel, { useTokenBalances } from '../../components/GetEurcPanel'
-import { EmptyState } from '../../components/EmptyState'
+import TapeEmptyState, { TapePrimaryAction } from '../../components/TapeEmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import { HallpassGate, WalletDownState } from './shared'
 
@@ -128,9 +128,9 @@ function SkeletonCard() {
 
 /**
  * Inner screen — calls useHallpass()/useWalletClient() directly, so it must
- * only render inside the gate below. Without the wallet stack (no provider
- * or no Reown project id) the gate renders WalletDownState instead of
- * crashing to a black screen (fix 2026-10-14).
+ * only render inside the gate below. The gate only runs its render prop when
+ * the wallet stack is configured (P1: no wagmi hook ever runs unconfigured,
+ * nothing throws); otherwise it renders WalletDownState.
  */
 function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
   const hp = useHallpass()
@@ -606,16 +606,24 @@ function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
 
       {!accountAddress ? (
         hp.isConnected ? (
-          <EmptyState
-            title="No account selected"
-            description="Pick an account on the Accounts screen to see its plugins."
+          <TapeEmptyState
+            title="No account selected."
+            copy="Pick an account on the Accounts screen to see its spending rules."
+            action={
+              <TapePrimaryAction to="/app/accounts">
+                Go to my accounts
+              </TapePrimaryAction>
+            }
           />
         ) : (
-          <EmptyState
-            title="No wallet connected"
-            description="Connect your wallet to see which spending rules are on your accounts."
-            actionLabel="Connect wallet"
-            onAction={() => hp.connect()}
+          <TapeEmptyState
+            title="No wallet connected."
+            copy="Connect your wallet to see which spending rules are on your accounts. Nothing is shown until then — nothing is guessed."
+            action={
+              <TapePrimaryAction onClick={() => hp.connect()}>
+                Connect wallet
+              </TapePrimaryAction>
+            }
           />
         )
       ) : chainError ? (
@@ -719,7 +727,7 @@ function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
 }
 
 /**
- * Gated default export — the wallet gate. useHallpass() throws when the
+ * Gated default export — the wallet gate. When unconfigured, the gate
  * wallet stack isn't ready (no provider yet, or no Reown project id); the
  * boundary turns that into the honest WalletDownState instead of a crash.
  */
