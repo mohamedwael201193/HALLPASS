@@ -2,7 +2,7 @@ HALLPASS build bundle — integrity record (2026-10-14, final)
 ============================================================
 
 Git (content identity — the meaningful identifier):
-  HEAD commit: f3208f2
+  Build commit: f3208f2 (this integrity record committed on top as 4626b28)
   Message: HALLPASS complete build: contracts (27/27 + 19/19 tests, H-1
            malleability fix), backend API CONTRACT.md v1.0.0 (32/32 tests),
            frontend (React+Vite, /api/v1 migration, gates green),
