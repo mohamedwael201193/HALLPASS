@@ -34,33 +34,38 @@ The dashboard reads live state **from chain** (`eth_call`, `getInstalledPlugins`
 
 Owner actions (install / update / revoke / create account) are signed by the user's own wallet (Reown) and submitted as txs or through the relay as userOps — never through this API as signed payloads.
 
-## Run locally (planned — not implemented yet)
+## Run locally
 
 ```bash
-cd backend
-npm install
-cp .env.example .env   # fill in: ARC_RPC_URL, RELAY_SIGNER_KEY, INDEXER_START_BLOCK
-npm run indexer         # background: syncs events -> local db
-npm run api             # serves the API on :8080
+# Indexer (read-only; writes backend/indexer/db.sqlite)
+cd backend/indexer && npm install
+PLUGIN_ADDRESS=0x<deployed-plugin> START_BLOCK=<deploy block> node index.js
+
+# API (serves /health, /api/config, /api/accounts/…, /api/activity, /api/stats)
+cd backend/api && npm install && npm start   # PORT=8787 by default
 ```
 
 Env vars (names only — never commit values):
-- `ARC_RPC_URL` — Arc mainnet RPC (default `https://rpc.mainnet.arc.io`)
-- `RELAY_SIGNER_KEY` — private key of the relay's beneficiary signer (self-relay only; no owner funds)
-- `INDEXER_START_BLOCK` — block to begin event backfill from
-- `DATABASE_URL` — indexer store (any Postgres)
+- `RPC_URL` — Arc mainnet RPC (default `https://rpc.mainnet.arc.io`)
+- `PLUGIN_ADDRESS` — deployed HallpassPlugin on Arc 5042 (required by the indexer; the API falls back to the H9 research deployment and says so in `/api/config`)
+- `START_BLOCK` — block to begin event backfill from (indexer)
+- `DB_PATH` — SQLite file path (indexer writes, API reads; default `backend/indexer/db.sqlite`)
+- `PORT` — API listen port (default 8787; Render injects this)
+- `RELAYER_PRIVATE_KEY` — key for the relay service's self-relayed `handleOps` submissions (**relay not built yet**; see below)
 
-## Deploy on Render (planned)
+## Deploy on Render
 
-- **Worker service** `hallpass-indexer`: runs `npm run indexer`, env: `ARC_RPC_URL`, `INDEXER_START_BLOCK`, `DATABASE_URL`
-- **Web service** `hallpass-api`: runs `npm run api`, env: `DATABASE_URL`; internal, exposed only to the dashboard
-- **Web service** `hallpass-relay`: the relay submission endpoint; env: `ARC_RPC_URL`, `RELAY_SIGNER_KEY`, `DATABASE_URL`
+- **Worker service** `hallpass-indexer`: runs the indexer; env: `RPC_URL`, `PLUGIN_ADDRESS`, `START_BLOCK`, `DB_PATH=/var/data/hallpass.db`
+- **Web service** `hallpass-api`: runs `node server.js`; env: `RPC_URL`, `PLUGIN_ADDRESS`, `DB_PATH=/var/data/hallpass.db`; internal, exposed only to the dashboard
+- **Relay service**: **planned, not implemented** — there is no public v0.7 bundler on Arc, so installs/spends currently self-relay from the owner's wallet
 
-Each service deploys independently. The indexer is stateless apart from the database; the API is stateless.
+Each service deploys independently. The indexer is stateless apart from the SQLite file; the API is stateless.
 
 ## Honest status
 
-This directory currently contains **docs only**. The relay, indexer, and API are specified but not implemented. Endpoints in `api/OPENAPI.yaml` are marked `x-status: planned` — they do not exist yet. Do not document or demo them as live.
+- **Indexer (`indexer/index.js`): implemented.** Read-only event scanner → SQLite. Refuses to run without `PLUGIN_ADDRESS`; refuses the wrong chain; commits only ≥12-confirmation blocks; reports honest empty results.
+- **API (`api/server.js` + `api/stats.js`): implemented.** `/health`, `/api/config`, `/api/accounts/:address/plugins`, `/api/accounts/:address/policies`, `/api/activity`, `/api/stats`. Every response carries `source` + `asOfBlock`; the chain is re-read directly with `?fresh=true` where it matters. No mock data: empty cache → empty arrays / zeros labeled `indexer-unavailable`.
+- **Relay: planned, not implemented.** `api/OPENAPI.yaml` endpoints are marked `x-status: planned` — they do not exist yet. Do not document or demo them as live.
 
 **Chain facts this backend assumes** (Arc mainnet, chain 5042 — from the build bible, verified on-chain):
 - EntryPoint v0.7: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
