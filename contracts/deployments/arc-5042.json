@@ -1,6 +1,1 @@
-{
-  "plugin": "0x8a81455a477deeA986ca48cE83ca89C5331Da793",
-  "deployer": "0xf76e6B0920e9332fF4410f6dD53F01722AbC71a3",
-  "blockNumber": 25959755,
-  "txHash": "0xf408ec17f3b9e915488fa901f190123fc56368f487ee6ee30eb80e065e86fe1c"
-}
+{"blockNumber":25967278,"costUSDC":"0.0608854431688104","deployer":"0xf76e6B0920e9332fF4410f6dD53F01722AbC71a3","gasUsed":2767520,"notes":"v0.2.0 with install fixes: supportsInterface returns 0x043140ed (deployed manager's IPlugin ID), ManifestAssociatedFunctionType enum order matches Circle (NONE,SELF,DEPENDENCY,RUNTIME_VALIDATION_ALWAYS_ALLOW,PRE_HOOK_ALWAYS_DENY), 8 runtime validations (isValidSignature not registered - view-only direct call). Supersedes 0x0632A9FeA303c0dB4544BF642a8aD0467C6c6980 (had wrong enum order, would not install).","plugin":"0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9","sourcify":"exact_match","txHash":"0x2f73058a5b6bdd52df8e5a94a5db99ffd384b822f2e47ea2402d33000dcb3357","version":"0.2.0"}

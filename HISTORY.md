@@ -143,8 +143,44 @@ Entries are appended here as build workers complete them. Nothing in this sectio
 - Sourcify: **exact_match** (creation + runtime), verified 2026-10-14T17:46:52Z. Also fixed `contracts/script/VerifyHallpass.sh` (Sourcify API v1 removed; now uses v2 `/v2/contract/{chainId}/{address}`) — re-ran green.
 - Wiring: frontend → `VITE_PLUGIN_ADDRESS`; backend API → `PLUGIN_ADDRESS` env (default stays the H9 deployment the indexer data refers to). Documented in `contracts/DEPLOYMENT.md` §8.
 
+### B7 — 2026-10-14 — v0.2.0: multi-asset (EURC) + typed-data path (founder-ordered)
+
+**The problem:** v0.1.x enforced caps on native value only — ERC-20 `transfer` calls (value=0) bypassed caps entirely. The founder ordered EURC support NOW with real userOp proofs.
+
+**Contract changes (`contracts/src/HallpassPlugin.sol`):**
+- `Policy` gains `tokens[]` + `tokenDecimals[]` (parallel arrays); 9-field `onInstall`/`updatePolicy` data.
+- `_spendValue` decodes `transfer(address,uint256)` on recognized tokens, normalizes to 18 decimals.
+- Strict mode: `tokens.length>0` → transfer-shaped calls to unlisted tokens revert `TokenNotAllowed`; non-`transfer` calls to recognized tokens (approve/transferFrom) revert `TokenCallNotAllowed`.
+- Empty `tokens` = legacy native-only mode (v0.1.x behavior preserved).
+- **Typed-data path:** `authorizeDigest(bytes32 digest, address token, address to, uint256 amount, uint64 expiry)` (FID_DIGEST=4, session key OR owner); `revokeDigest`; `isValidSignature` view-only returning MAGIC `0x1626ba7e` or `0xffffffff`, never reverts.
+
+**The install blocker (root-caused):**
+- v0.2.0 would not install via `initializeUpgradableMSCA` — reverted with empty data.
+- Root cause 1: `supportsInterface` returned `type(IPlugin).interfaceId` = `0x9ce39c57` (vendored), but the DEPLOYED PluginManager checks `0x043140ed` (extracted from H9 plugin `0x7C91` bytecode). Fixed: hardcode `0x043140ed`.
+- Root cause 2: `ManifestAssociatedFunctionType` enum order was wrong. My contract had (NONE,RUNTIME_VALIDATION_ALWAYS_ALLOW,PRE_HOOK_ALWAYS_DENY,SELF,DEPENDENCY), but Circle's deployed manager uses (NONE,SELF,DEPENDENCY,RUNTIME_VALIDATION_ALWAYS_ALLOW,PRE_HOOK_ALWAYS_DENY). My `SELF` (encoded as 3) was interpreted as `RUNTIME_VALIDATION_ALWAYS_ALLOW`, causing `InvalidPluginManifest()`. Fixed: reordered enum.
+- Root cause 3: `RUNTIME_VALIDATION_ALWAYS_ALLOW` for `isValidSignature` — the deployed manager does not support it. Fixed: removed from manifest (8 runtime validations instead of 9); `isValidSignature` is view-only and callable directly.
+
+**Deployments:**
+- First v0.2.0: `0x0632A9FeA303c0dB4544BF642a8aD0467C6c6980`, tx `0x08313c1997200df1f993636c534174aa67a10d0ff148475ac55904da81f9997e`, block 25963756 (had the enum bug, would not install — superseded).
+- **Production v0.2.0:** **`0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9`**, tx `0x2f73058a5b6bdd52df8e5a94a5db99ffd384b822f2e47ea2402d33000dcb3357`, block 25967278, gas 2,767,520, cost 0.0609 USDC. Sourcify **exact_match**.
+
+**Tests:** 47/47 unit + 19/19 fork = **66/66 green**.
+
+**Q2 E2E on mainnet** (account `0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f`, script `scripts/q2-dust-e2e.js`):
+- Install: `0x231c45ebeb40e889087eaf2716f9c8ee2722d39b38ab44a178ebed892b5f064d` (status 1)
+- Native 0.005 (under 0.01 cap): `0xdd36273a25f9597081d9be6438e996a5a485814ba8f215eddfad0ce9d57712ef` (status 1)
+- EURC 4,000 units (0.004, under cap): `0xf0e93b683c552b21f9e4edf0ac37702d92a651798df2e370add493ea1bcaa988` (status 1) — **multi-asset proven**
+- Native 0.05 over-cap: `0xe5846d3bdd119865bee75adb054c6342d291cff528d2175f44314b46e5126116` (status 0, `PerTxCapExceeded(0.05,0.01)`)
+- EURC 50,000 units over-cap: `0xebfe6ab007b5931a6ea2c7197531853db0376ca332c2569577766025a158076f` (status 0, `PerTxCapExceeded`) — **multi-asset enforcement proven**
+- `authorizeDigest`: `0x78703fd1c787ca5e4a41364ddc339d5735d613660c89fc2bbf873bbe7fbca210` (status 1) — **typed-data path proven**
+- `revokeSession`: `0x74ff7a254a7a68476869644c3e7babc64c2eed745415d2135a2faa10e5a79807` (status 1)
+- Post-revoke spend: `0x3faee2cc95ab058730aaa8da6427d809eeb561210440051b8f375af773708384` (status 0, `SessionRevoked()`)
+
+**EURC acquisition:** Swapped 30,000 USDC units → 26,899 EURC units via Uniswap v3: tx `0x97c5176a0d91f0b38ee20d3e0b91239e0f189b326f4192548c96841f17cc9162`.
+
+**Frontend (Get EURC + icons):** Worker completed — `TokenIcon` component, `GetEurcPanel` with LI.FI swap (live quote only), CCTP bridge guidance, Circle Onramp mention. Icons at `frontend/public/assets/tokens/{usdc,eurc}.png`.
+
 ### Upcoming (PLANNED)
 
-- **B7 (PLANNED):** re-prove the money-shots against the production `0x8a81…793` deployment (in-policy spend, over-cap revert, userOp, revoke, typed-data gate) — the enforcement paths are byte-identical to the proven `0x7C91…` binary except the malleability bound.
 - **B8 (PLANNED):** relay service contract for `VITE_RELAY_URL` (currently throws `RelayNotConfiguredError`; dashboard self-relays) — or remove the relay path if self-relay stays the design.
 - **B9 (PLANNED):** submission package for the program deadline (2026-10-14 23:59 ET).

@@ -3,6 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
+import TokenIcon, { type TokenKind } from '../../components/TokenIcon'
+
+/** Official mark for the row's token (the feed currently reports USDC amounts). */
+function rowToken(item: ApiItem): TokenKind {
+  return item.amount?.unit === 'EURC' ? 'EURC' : 'USDC'
+}
 
 /* ============================================================================
  * Activity — every spend attempt on one smart account.
@@ -407,8 +413,10 @@ function AllowedCard({ item, index }: { item: ApiItem; index: number }) {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-body text-sm font-semibold text-text sm:text-base">
-            <span className="text-amber">Allowed</span> — {cleanHeadline(item)}
+          <p className="flex flex-wrap items-center gap-x-2 font-body text-sm font-semibold text-text sm:text-base">
+            <span className="text-amber">Allowed</span>
+            <TokenIcon token={rowToken(item)} size={18} />
+            <span>{cleanHeadline(item)}</span>
           </p>
           <p className="mt-1 font-body text-xs text-text/50 sm:text-sm">{item.detail}</p>
           <RowFooter item={item} />
@@ -434,8 +442,10 @@ function BlockedCard({ item, index }: { item: ApiItem; index: number }) {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-body text-sm font-semibold text-text sm:text-base">
-            <span className="text-red-300">Blocked</span> — {cleanHeadline(item)}
+          <p className="flex flex-wrap items-center gap-x-2 font-body text-sm font-semibold text-text sm:text-base">
+            <span className="text-red-300">Blocked</span>
+            <TokenIcon token={rowToken(item)} size={18} />
+            <span>{cleanHeadline(item)}</span>
           </p>
           <p className="mt-1.5 font-body text-xs text-red-200/90 sm:text-sm">
             <span className="font-semibold">Why:</span> {item.detail}

@@ -68,8 +68,18 @@ export const CONFIGURED_MANIFEST_HASH: Hex | undefined = env.VITE_PLUGIN_MANIFES
 export const ACCOUNT_IMPL_ADDRESS: Address =
   '0xA70F1296869DA9D7CB69578123F21888E6dB2B62';
 
-/** Arc USDC ERC-20 — 6 decimals (decimals() verified on-chain, bible §4.7). */
+/** Arc USDC ERC-20 — 18 decimals (native gas token, decimals() verified
+ * on-chain, bible §4.2). */
 export const USDC_ADDRESS: Address = '0x3600000000000000000000000000000000000000';
+
+/**
+ * Circle EURC on Arc mainnet — 6 decimals, symbol EURC, nonzero supply
+ * (verified live 2026-10-14). Added for multi-asset sessions (plugin v0.2.0).
+ * NOTE: checksum-cased via viem getAddress — the EIP-55 casing matters
+ * because viem's ABI encoder rejects bad-checksum addresses at runtime.
+ */
+export const EURC_ADDRESS: Address =
+  '0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1';
 
 /** Circle MSCA v1 factory — ALLOWLISTED. Do NOT use for custom plugins (bible §3). */
 export const MSCA_FACTORY_ADDRESS: Address =
@@ -113,7 +123,7 @@ export const ON_UNINSTALL_SELECTOR = computedSelector('onUninstall(bytes)', '0x8
 // HallpassPlugin installed execution functions (no bible literals — computed only)
 export const REVOKE_SESSION_SELECTOR = computedSelector('revokeSession()');
 export const UPDATE_POLICY_SELECTOR = computedSelector(
-  'updatePolicy(address,uint256,uint256,uint256,uint256,address[])',
+  'updatePolicy(address,uint256,uint256,uint256,uint256,address[],address[],uint8[])',
 );
 // Manifest read (no args; raw return data is keccak256'd — see fetchManifestHash)
 export const PLUGIN_MANIFEST_SELECTOR = computedSelector('pluginManifest()');
@@ -137,9 +147,9 @@ export const accountAbi = [
 export const pluginAbi = [
   // --- installed execution functions (called via the account fallback) ---
   'function revokeSession()',
-  'function updatePolicy(address sessionKey, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist)',
-  // --- policy read ---
-  'function policies(address account) view returns (address sessionKey, address owner, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist, uint256 windowStart, uint256 windowSpent, bool revoked)',
+  'function updatePolicy(address sessionKey, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist, address[] tokens, uint8[] tokenDecimals)',
+  // --- policy read (v0.2.0: full 12-field Policy struct) ---
+  'function policies(address account) view returns (address sessionKey, address owner, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist, uint256 windowStart, uint256 windowSpent, bool revoked, address[] tokens, uint8[] tokenDecimals)',
   // --- events (activity feed, bible §8.6) ---
   'event SessionRegistered(address indexed account, address indexed sessionKey, uint256 perTxCap, uint256 windowCap, uint256 expiry)',
   'event SpendAuthorized(address indexed account, address indexed sessionKey, address indexed to, uint256 amount, uint256 windowSpent)',
@@ -168,6 +178,8 @@ export const entryPointAbi = [
 export const erc20Abi = [
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -269,16 +281,38 @@ export interface PolicyParams {
   expiry: bigint;
   /** Empty = open (caps-only mode), stated explicitly in the UI (bible §8.4). */
   allowlist: Address[];
+  /**
+   * v0.2.0 multi-asset: capped token contracts, parallel to tokenDecimals.
+   * USDC → 18 decimals, EURC → 6 decimals. The plugin scales the shared caps
+   * into each token's own units. Pass [USDC_ADDRESS] for USDC-only sessions.
+   */
+  tokens: Address[];
+  /** Per-token decimals, parallel to tokens (USDC 18, EURC 6). */
+  tokenDecimals: number[];
 }
 
 /**
- * onInstall init data: abi.encode(sessionKey, owner, perTxCap, windowCap,
- * windowSecs, expiry, allowlist) — bible §4.2.
+ * onInstall init data (plugin v0.2.0, FINAL):
+ * abi.encode(sessionKey, owner, perTxCap, windowCap, windowSecs, expiry,
+ *            allowlist, tokens, tokenDecimals)
+ * where tokens is address[] and tokenDecimals is uint8[] — parallel arrays.
  */
 export function encodePolicyInitData(p: PolicyParams): Hex {
   return encodeAbiParameters(
-    parseAbiParameters('address, address, uint256, uint256, uint256, uint256, address[]'),
-    [p.sessionKey, p.owner, p.perTxCapWei, p.windowCapWei, p.windowSecs, p.expiry, p.allowlist],
+    parseAbiParameters(
+      'address, address, uint256, uint256, uint256, uint256, address[], address[], uint8[]',
+    ),
+    [
+      p.sessionKey,
+      p.owner,
+      p.perTxCapWei,
+      p.windowCapWei,
+      p.windowSecs,
+      p.expiry,
+      p.allowlist,
+      p.tokens,
+      p.tokenDecimals,
+    ],
   );
 }
 
@@ -294,19 +328,22 @@ export function encodeAccountFallbackCalldata(
   if (functionName === 'revokeSession') {
     return REVOKE_SESSION_SELECTOR as Hex;
   }
-  const [sessionKey, perTxCap, windowCap, windowSecs, expiry, allowlist] = args as [
+  const [sessionKey, perTxCap, windowCap, windowSecs, expiry, allowlist, tokens, tokenDecimals] = args as [
     Address,
     bigint,
     bigint,
     bigint,
     bigint,
     Address[],
+    Address[],
+    number[],
   ];
   // encodeFunctionData-equivalent without a full ABI import:
+  // updatePolicy(address,uint256,uint256,uint256,uint256,address[],address[],uint8[])
   return (UPDATE_POLICY_SELECTOR +
     encodeAbiParameters(
-      parseAbiParameters('address, uint256, uint256, uint256, uint256, address[]'),
-      [sessionKey, perTxCap, windowCap, windowSecs, expiry, allowlist],
+      parseAbiParameters('address, uint256, uint256, uint256, uint256, address[], address[], uint8[]'),
+      [sessionKey, perTxCap, windowCap, windowSecs, expiry, allowlist, tokens, tokenDecimals],
     ).slice(2)) as Hex;
 }
 
@@ -343,6 +380,24 @@ export function formatNativeUsdc(wei: bigint): string {
   const frac = s.slice(-18).replace(/0+$/, '');
   return frac ? `${whole}.${frac}` : whole;
 }
+
+/** Generic ERC-20 units → human string for any decimals (EURC: 6). */
+export function formatTokenUnits(units: bigint, decimals: number): string {
+  const neg = units < 0n;
+  const abs = neg ? -units : units;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const frac = (abs % base).toString().padStart(decimals, '0').replace(/0+$/, '');
+  return `${neg ? '-' : ''}${whole.toString()}${frac ? `.${frac}` : ''}`;
+}
+
+/** EURC base units (6 decimals) → human string. */
+export function formatEurc(units: bigint): string {
+  return formatTokenUnits(units, EURC_DECIMALS);
+}
+
+/** EURC decimals on Arc mainnet. */
+export const EURC_DECIMALS = 6;
 
 // ---------------------------------------------------------------------------
 // Revert decoding → user-facing copy (bible hard rule 4). A raw hex blob shown
@@ -422,8 +477,17 @@ export async function isPluginInstalled(
 
 /** ERC-20 USDC balance (6 decimals) of an account. */
 export async function getUsdcBalance(client: PublicClient, account: Address): Promise<bigint> {
+  return getTokenBalance(client, USDC_ADDRESS, account);
+}
+
+/** Read-only ERC-20 balance of any token for any account — no wallet needed. */
+export async function getTokenBalance(
+  client: PublicClient,
+  token: Address,
+  account: Address,
+): Promise<bigint> {
   return (await client.readContract({
-    address: USDC_ADDRESS,
+    address: token,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: [account],

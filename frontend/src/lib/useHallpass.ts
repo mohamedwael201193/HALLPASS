@@ -197,10 +197,10 @@ export function useHallpass(): UseHallpass {
           functionName: 'policies',
           args: [account],
         });
-        const [sessionKey, owner, perTxCap, windowCap, windowSecs, expiry, allowlist, windowStart, windowSpent, revoked] = p as unknown as [
-          Address, Address, bigint, bigint, bigint, bigint, Address[], bigint, bigint, boolean,
+        const [sessionKey, owner, perTxCap, windowCap, windowSecs, expiry, allowlist, windowStart, windowSpent, revoked, tokens, tokenDecimals] = p as unknown as [
+          Address, Address, bigint, bigint, bigint, bigint, Address[], bigint, bigint, boolean, Address[], number[],
         ];
-        return { sessionKey, owner, perTxCapWei: perTxCap, windowCapWei: windowCap, windowSecs, expiry, allowlist, windowStart, windowSpent, revoked };
+        return { sessionKey, owner, perTxCapWei: perTxCap, windowCapWei: windowCap, windowSecs, expiry, allowlist, tokens, tokenDecimals, windowStart, windowSpent, revoked };
       },
       getUsdcBalance: (account) => getUsdcBalance(client, account),
       fetchManifestHash: (plugin) => fetchManifestHash(client, plugin),
@@ -283,6 +283,8 @@ export function useHallpass(): UseHallpass {
             policy.windowSecs,
             policy.expiry,
             policy.allowlist,
+            policy.tokens,
+            policy.tokenDecimals,
           ]),
         ),
 

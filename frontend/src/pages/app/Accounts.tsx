@@ -19,7 +19,9 @@ import {
 } from 'react';
 import { Link } from 'react-router-dom';
 import { isAddress, type Address } from 'viem';
-import { publicClient, formatNativeUsdc } from '../../lib/contracts';
+import { publicClient, formatNativeUsdc, formatEurc, getTokenBalance, EURC_ADDRESS } from '../../lib/contracts';
+import TokenIcon from '../../components/TokenIcon';
+import GetEurcPanel from '../../components/GetEurcPanel';
 import type { UseHallpass } from '../../lib/useHallpass';
 import {
   ApiError,
@@ -35,7 +37,6 @@ import {
   explorerAddressUrl,
   explorerTxUrl,
   fetchAccountPlugins,
-  formatTokenUsdc,
   loadTrackedAccounts,
   plainError,
   saveTrackedAccounts,
@@ -69,7 +70,7 @@ function StatCard({
   value,
   sub,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
   sub?: string;
 }) {
@@ -218,6 +219,7 @@ type ChainState =
   | {
       status: 'ready';
       usdc: bigint;
+      eurc: bigint;
       native: bigint;
       chainPlugins: Address[];
     }
@@ -240,11 +242,12 @@ function AccountCard({
     setChain({ status: 'loading' });
     Promise.all([
       hp.getUsdcBalance(account),
+      getTokenBalance(publicClient, EURC_ADDRESS, account),
       publicClient.getBalance({ address: account }),
       hp.getInstalledPlugins(account),
     ])
-      .then(([usdc, native, chainPlugins]) => {
-        if (!cancelled) setChain({ status: 'ready', usdc, native, chainPlugins });
+      .then(([usdc, eurc, native, chainPlugins]) => {
+        if (!cancelled) setChain({ status: 'ready', usdc, eurc, native, chainPlugins });
       })
       .catch((e: unknown) => {
         if (!cancelled) setChain({ status: 'error', error: plainError(e) });
@@ -318,7 +321,8 @@ function AccountCard({
 
       <div className="mt-4">
         {chain.status === 'loading' && (
-          <div className="grid grid-cols-3 gap-3" aria-label="Loading balances">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Loading balances">
+            <Skeleton className="h-[76px]" />
             <Skeleton className="h-[76px]" />
             <Skeleton className="h-[76px]" />
             <Skeleton className="h-[76px]" />
@@ -332,23 +336,43 @@ function AccountCard({
           />
         )}
         {chain.status === 'ready' && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard
-              label="USDC balance"
-              value={formatTokenUsdc(chain.usdc)}
-              sub="ERC-20 · 6 decimals"
-            />
-            <StatCard
-              label="Gas balance"
-              value={formatNativeUsdc(chain.native)}
-              sub="native USDC · 18 decimals"
-            />
-            <StatCard
-              label="Plugins on-chain"
-              value={String(chain.chainPlugins.length)}
-              sub="via getInstalledPlugins()"
-            />
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatCard
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <TokenIcon token="USDC" size={16} /> USDC balance
+                  </span>
+                }
+                value={formatNativeUsdc(chain.usdc)}
+                sub="18 decimals"
+              />
+              <StatCard
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <TokenIcon token="EURC" size={16} /> EURC balance
+                  </span>
+                }
+                value={formatEurc(chain.eurc)}
+                sub="6 decimals"
+              />
+              <StatCard
+                label="Gas balance"
+                value={formatNativeUsdc(chain.native)}
+                sub="native USDC · 18 decimals"
+              />
+              <StatCard
+                label="Plugins on-chain"
+                value={String(chain.chainPlugins.length)}
+                sub="via getInstalledPlugins()"
+              />
+            </div>
+            {hp.address && (
+              <div className="mt-4">
+                <GetEurcPanel address={hp.address} />
+              </div>
+            )}
+          </>
         )}
       </div>
 

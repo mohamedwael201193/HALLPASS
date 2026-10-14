@@ -138,6 +138,35 @@ If you verify only one thing: open rows 1, 8, 9, 11, 12, 20 in the explorer. Six
 
 ---
 
+## 3.5 v0.2.0 Production Proofs (2026-10-14) — PROVEN on mainnet
+
+**Production plugin:** [0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9](https://explorer.arc.io/address/0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9) (v0.2.0, Sourcify **exact_match**)
+- Deploy tx: [0x2f73058a5b6bdd52df8e5a94a5db99ffd384b822f2e47ea2402d33000dcb3357](https://explorer.arc.io/tx/0x2f73058a5b6bdd52df8e5a94a5db99ffd384b822f2e47ea2402d33000dcb3357) — block 25967278, gas 2,767,520, cost 0.0609 USDC
+- **Critical fix vs 0x0632...:** The first v0.2.0 deploy (0x0632A9FeA303c0dB4544BF642a8aD0467C6c6980) had the `ManifestAssociatedFunctionType` enum in the wrong order (NONE,RUNTIME_VALIDATION_ALWAYS_ALLOW,PRE_HOOK_ALWAYS_DENY,SELF,DEPENDENCY). The deployed PluginManager uses Circle's order (NONE,SELF,DEPENDENCY,RUNTIME_VALIDATION_ALWAYS_ALLOW,PRE_HOOK_ALWAYS_DENY). The wrong order caused `InvalidPluginManifest()` on install. Fixed and redeployed as 0x5543... Additionally, `supportsInterface` now returns `0x043140ed` (the deployed manager's IPlugin interface ID, extracted from H9 plugin bytecode) instead of the vendored `0x9ce39c57`.
+- Unit tests: 47/47 pass. Fork tests: 19/19 pass (with `--fork-url https://rpc.mainnet.arc.io`).
+
+**Q2 E2E — Full money-shot on mainnet** (account [0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f](https://explorer.arc.io/address/0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f), policy: per-tx 0.01 / EURC+USDC multi-asset):
+
+| Step | Claim | Tx Hash | Status |
+|------|-------|---------|--------|
+| B | **v0.2.0 installs** via `initializeUpgradableMSCA` with 9-field policy data (EURC session) | [0x231c45ebeb40e889087eaf2716f9c8ee2722d39b38ab44a178ebed892b5f064d](https://explorer.arc.io/tx/0x231c45ebeb40e889087eaf2716f9c8ee2722d39b38ab44a178ebed892b5f064d) | **PROVEN** (status 1) |
+| D | **In-policy native spend succeeds:** 0.005 native under 0.01 cap | [0xdd36273a25f9597081d9be6438e996a5a485814ba8f215eddfad0ce9d57712ef](https://explorer.arc.io/tx/0xdd36273a25f9597081d9be6438e996a5a485814ba8f215eddfad0ce9d57712ef) | **PROVEN** (status 1) |
+| E | **In-policy EURC spend succeeds:** 4,000 EURC units (0.004 EURC) under cap — **THE multi-asset proof** | [0xf0e93b683c552b21f9e4edf0ac37702d92a651798df2e370add493ea1bcaa988](https://explorer.arc.io/tx/0xf0e93b683c552b21f9e4edf0ac37702d92a651798df2e370add493ea1bcaa988) | **PROVEN** (status 1; payee EURC balance increased) |
+| F | **Over-cap native reverts:** 0.05 native vs 0.01 cap → `PerTxCapExceeded(0.05, 0.01)` | [0xe5846d3bdd119865bee75adb054c6342d291cff528d2175f44314b46e5126116](https://explorer.arc.io/tx/0xe5846d3bdd119865bee75adb054c6342d291cff528d2175f44314b46e5126116) | **PROVEN** (status 0, exact revert) |
+| G | **Over-cap EURC reverts:** 50,000 EURC units vs cap → `PerTxCapExceeded` — **THE multi-asset enforcement proof** | [0xebfe6ab007b5931a6ea2c7197531853db0376ca332c2569577766025a158076f](https://explorer.arc.io/tx/0xebfe6ab007b5931a6ea2c7197531853db0376ca332c2569577766025a158076f) | **PROVEN** (status 0, exact revert) |
+| J | **Typed-data path:** `authorizeDigest` pre-authorizes a digest (session key) | [0x78703fd1c787ca5e4a41364ddc339d5735d613660c89fc2bbf873bbe7fbca210](https://explorer.arc.io/tx/0x78703fd1c787ca5e4a41364ddc339d5735d613660c89fc2bbf873bbe7fbca210) | **PROVEN** (status 1) |
+| K | **Owner `revokeSession()`** succeeds | [0x74ff7a254a7a68476869644c3e7babc64c2eed745415d2135a2faa10e5a79807](https://explorer.arc.io/tx/0x74ff7a254a7a68476869644c3e7babc64c2eed745415d2135a2faa10e5a79807) | **PROVEN** (status 1) |
+| L | **Post-revoke spend reverts `SessionRevoked()`** | [0x3faee2cc95ab058730aaa8da6427d809eeb561210440051b8f375af773708384](https://explorer.arc.io/tx/0x3faee2cc95ab058730aaa8da6427d809eeb561210440051b8f375af773708384) | **PROVEN** (status 0, exact revert) |
+
+**EURC acquisition (for the multi-asset tests):**
+- Swap 30,000 USDC units → 26,899 EURC units via Uniswap v3: tx [0x97c5176a0d91f0b38ee20d3e0b91239e0f189b326f4192548c96841f17cc9162](https://explorer.arc.io/tx/0x97c5176a0d91f0b38ee20d3e0b91239e0f189b326f4192548c96841f17cc9162) — **PROVEN**
+
+**What is SPECIFIED (not yet proven on the production build):**
+- Real ERC-4337 v0.7 userOp via `EntryPoint.handleOps` on the production v0.2.0 (the E2E used direct session-key calls; the userOp path is proven in unit tests and was proven on the research build, but not yet on v0.2.0 mainnet).
+- `isValidSignature` returning MAGIC `0x1626ba7e` via the account (proven in unit tests; on-chain routing requires the account to forward the call, which the MSCA does not do for view functions — the plugin must be called directly).
+
+---
+
 ## 4. What we will never do
 
 Quoted from the build bible's hard rules (non-negotiable):

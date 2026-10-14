@@ -6,6 +6,8 @@ import { useHallpass } from '../../lib/useHallpass'
 import {
   accountAbi,
   usdcToNativeWei,
+  USDC_ADDRESS,
+  EURC_ADDRESS,
   type PolicyParams,
   type PluginVerification,
 } from '../../lib/contracts'
@@ -14,6 +16,8 @@ import PolicyCard, {
   type PluginMeta,
   type VerificationNote,
 } from '../../components/PolicyCard'
+import TokenIcon, { type TokenKind } from '../../components/TokenIcon'
+import GetEurcPanel, { useTokenBalances } from '../../components/GetEurcPanel'
 import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 
@@ -140,6 +144,13 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
   const [expiryHours, setExpiryHours] = useState('168')
   const [allowlist, setAllowlist] = useState('')
   const [touched, setTouched] = useState(false)
+  /** Multi-asset cap tokens (plugin v0.2.0): at least one of USDC / EURC. */
+  const [capTokens, setCapTokens] = useState<Record<TokenKind, boolean>>({
+    USDC: true,
+    EURC: false,
+  })
+
+  const tokenBalances = useTokenBalances(hp.address)
 
   const pollRef = useRef(0)
   const plugin = hp.pluginAddress
@@ -192,6 +203,10 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
     sessionKey: !isAddress(sessionKey.trim())
       ? "Enter the agent key's address (0x followed by 40 hex characters)."
       : '',
+    capTokens:
+      !capTokens.USDC && !capTokens.EURC
+        ? 'Pick at least one capped token — USDC, EURC, or both.'
+        : '',
     perTx: perTxWei === null || perTxWei <= 0n ? 'Enter an amount above 0, like 0.10.' : '',
     windowCap:
       windowWei === null || windowWei <= 0n
@@ -275,6 +290,26 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
   }
 
   function buildPolicy(): PolicyParams {
+    // v0.2.0 multi-asset: tokens + parallel decimals (USDC 18, EURC 6).
+    const tokens: Address[] = [];
+    const tokenDecimals: number[] = [];
+    if (capTokens.USDC) {
+      tokens.push(USDC_ADDRESS);
+      tokenDecimals.push(18);
+    }
+    if (capTokens.EURC) {
+      tokens.push(EURC_ADDRESS);
+      tokenDecimals.push(6);
+    }
+    // The plugin gates the token contract for token spends — when EURC is a
+    // capped asset its contract address must be allowlisted, automatically.
+    const allowlistFinal = [...(allowlistAddrs as Address[])];
+    if (
+      capTokens.EURC &&
+      !allowlistFinal.some((a) => a.toLowerCase() === EURC_ADDRESS.toLowerCase())
+    ) {
+      allowlistFinal.push(EURC_ADDRESS);
+    }
     return {
       sessionKey: sessionKey.trim() as Address,
       owner: hp.address as Address,
@@ -282,9 +317,16 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
       windowCapWei: windowWei as bigint,
       windowSecs: windowSecs as bigint,
       expiry: BigInt(Math.floor(Date.now() / 1000)) + (expirySecs as bigint),
-      allowlist: allowlistAddrs as Address[],
-    }
+      allowlist: allowlistFinal,
+      tokens,
+      tokenDecimals,
+    };
   }
+
+  // Show the Get EURC panel when EURC is a capped asset but the connected
+  // wallet holds none — never strand a USDC-only user.
+  const showGetEurc =
+    capTokens.EURC && !!hp.address && tokenBalances.loaded && tokenBalances.eurc === 0n;
 
   async function handleInstall() {
     setTouched(true)
@@ -354,6 +396,13 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
     }
   }
 
+  const capTokenOptions: { kind: TokenKind; decimals: number; note: string }[] = [
+    { kind: 'USDC', decimals: 18, note: "Arc's gas token" },
+    { kind: 'EURC', decimals: 6, note: 'Euro stablecoin' },
+  ]
+
+  const selectedTokenNames = (['USDC', 'EURC'] as TokenKind[]).filter((t) => capTokens[t])
+
   const policyForm = (
     <div className="mb-2 mt-1">
       <h3 className="mb-3 text-sm font-extrabold uppercase tracking-[0.15em] text-amber">
@@ -374,8 +423,62 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
             className={inputCls(touched && !!errs.sessionKey)}
           />
         </Field>
+        <Field
+          label="Capped tokens"
+          error={touched ? errs.capTokens || undefined : undefined}
+          help="The caps below apply to each token in its own units."
+        >
+          <div className="grid grid-cols-2 gap-3" role="group" aria-label="Capped tokens">
+            {capTokenOptions.map((opt) => {
+              const on = capTokens[opt.kind]
+              return (
+                <button
+                  key={opt.kind}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setCapTokens((s) => ({ ...s, [opt.kind]: !s[opt.kind] }))
+                  }
+                  className={`flex min-h-[64px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                    on
+                      ? 'border-amber/60 bg-amber/[0.08]'
+                      : 'border-text/15 bg-ink hover:border-text/30'
+                  }`}
+                >
+                  <TokenIcon token={opt.kind} size={28} />
+                  <span>
+                    <span className="block font-body text-base font-bold text-text">
+                      {opt.kind}
+                    </span>
+                    <span className="block font-body text-xs text-text/50">
+                      {opt.note} · {opt.decimals} decimals
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden
+                    className={`ml-auto flex h-5 w-5 items-center justify-center rounded-md border text-[13px] font-bold ${
+                      on ? 'border-amber bg-amber text-ink' : 'border-text/30 text-transparent'
+                    }`}
+                  >
+                    ✓
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+        {capTokens.EURC && (
+          <p className="rounded-xl border border-amber/25 bg-amber/[0.05] px-4 py-3 font-body text-[13px] leading-relaxed text-text/70">
+            EURC's contract address is added to the destination list automatically —
+            the plugin gates the token contract whenever a token spend happens.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Max per payment (USDC)" error={touched ? errs.perTx || undefined : undefined}>
+          <Field
+            label="Max per payment"
+            error={touched ? errs.perTx || undefined : undefined}
+            help="Per capped token, in that token's own units."
+          >
             <input
               value={perTx}
               onChange={(e) => setPerTx(e.target.value)}
@@ -383,7 +486,11 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
               className={inputCls(touched && !!errs.perTx)}
             />
           </Field>
-          <Field label="Max per window (USDC)" error={touched ? errs.windowCap || undefined : undefined}>
+          <Field
+            label="Max per window"
+            error={touched ? errs.windowCap || undefined : undefined}
+            help="Per capped token, in that token's own units."
+          >
             <input
               value={windowCap}
               onChange={(e) => setWindowCap(e.target.value)}
@@ -433,8 +540,13 @@ export default function Marketplace({ accountAddress }: { accountAddress?: Addre
           />
         </Field>
       </div>
+      {showGetEurc && hp.address && (
+        <div className="mt-5 max-w-[640px]">
+          <GetEurcPanel address={hp.address} title="You picked EURC but hold none" />
+        </div>
+      )}
       <p className="mt-3 max-w-[60ch] font-body text-[13px] leading-relaxed text-text/50">
-        {`In plain words: this key may spend at most $${perTx || '…'} per payment, $${windowCap || '…'} every ${windowHours || '…'} hours${
+        {`In plain words: this key may spend at most $${perTx || '…'} per payment, $${windowCap || '…'} every ${windowHours || '…'} hours, in ${selectedTokenNames.length ? selectedTokenNames.join(' and ') : '…'}${
           allowlistAddrs.length
             ? `, only to ${allowlistAddrs.length} address${allowlistAddrs.length > 1 ? 'es' : ''}`
             : ', to anyone'

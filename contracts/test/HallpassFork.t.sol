@@ -312,7 +312,9 @@ contract HallpassForkTest is Test {
                 uint256(2e16), // windowCap: 0.02
                 uint256(3600), // windowSecs
                 block.timestamp + 2 hours, // expiry
-                new address[](0) // allowlist: empty = open
+                new address[](0), // allowlist: empty = open
+                new address[](0), // tokens: empty = legacy native-only mode (v0.2.0)
+                new uint8[](0) // tokenDecimals
             )
         );
     }
@@ -500,12 +502,15 @@ contract HallpassForkTest is Test {
     ///         HallpassPlugin: its manifest claims no 0x1626ba7e execution
     ///         function and its ERC-165 does not report 1271. The chain side of
     ///         the 1271 story is covered by the LIVE tests above.
-    function test_LocalPlugin_HasNo1271ExecutionFunction() public {
+    function test_LocalPlugin_Has1271ExecutionFunction() public {
         HallpassPlugin plugin = new HallpassPlugin();
         PluginManifest memory m = plugin.pluginManifest();
+        bool found;
         for (uint256 i = 0; i < m.executionFunctions.length; i++) {
-            assertTrue(m.executionFunctions[i] != IS_VALID_SIG, "plugin should not claim 1271");
+            if (m.executionFunctions[i] == IS_VALID_SIG) found = true;
         }
-        assertFalse(plugin.supportsInterface(IS_VALID_SIG), "plugin should not report 1271");
+        assertTrue(found, "v0.2.0 must claim the 1271 execution function");
+        // Note: isValidSignature is NOT in runtimeValidationFunctions (deployed manager
+        // does not support RUNTIME_VALIDATION_ALWAYS_ALLOW). It is view-only and callable directly.
     }
 }

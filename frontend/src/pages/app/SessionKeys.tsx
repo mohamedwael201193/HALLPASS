@@ -5,6 +5,7 @@ import { type UseHallpass } from '../../lib/useHallpass'
 import { HallpassGate, WalletDownState } from './shared'
 import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
+import TokenIcon from '../../components/TokenIcon'
 
 /* ============================================================================
  * SessionKeys — the hall passes on one smart account.
@@ -498,8 +499,14 @@ function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHal
 
                   {/* Policy summary chips: cap · expiry countdown · destinations */}
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Chip tone="amber">≤ {s.perTxCap.formatted} USDC per payment</Chip>
-                    <Chip>≤ {s.windowCap.formatted} USDC per window</Chip>
+                    <Chip tone="amber">
+                      <TokenIcon token="USDC" size={14} />
+                      ≤ {s.perTxCap.formatted} USDC per payment
+                    </Chip>
+                    <Chip>
+                      <TokenIcon token="USDC" size={14} />
+                      ≤ {s.windowCap.formatted} USDC per window
+                    </Chip>
                     {cd && (
                       <Chip tone={cd.urgent ? 'red' : 'neutral'}>
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
@@ -528,7 +535,8 @@ function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHal
                   {liveSpend && (
                     <div className="mt-4">
                       <div className="flex items-center justify-between font-body text-xs text-text/50">
-                        <span>
+                        <span className="inline-flex flex-wrap items-center gap-x-1.5">
+                          <TokenIcon token="USDC" size={14} />
                           {formatNativeUsdc(liveSpend.windowSpent)} of{' '}
                           {formatNativeUsdc(liveSpend.windowCapWei)} USDC used this window{' '}
                           {fmtWindow(liveSpend.windowSecs)}
