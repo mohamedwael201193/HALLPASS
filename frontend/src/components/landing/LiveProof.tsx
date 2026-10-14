@@ -5,23 +5,15 @@
  * hallpass-build-bible.md §6 (Test evidence ledger, H9 sprint, all Arc
  * mainnet chain 5042). Anything truncated in the bible is OMITTED here.
  * No invented hashes or addresses.
+ *
+ * Carry-exact shell; only styling changed. All copy byte-identical.
  */
 
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
+import { CarrySection, SectionH2, SectionBody } from "./carry/Section";
 
 const EXPLORER = "https://explorer.arc.io";
-
-const TOKENS = {
-  bg: "#121110",
-  amber: "#FFB224",
-  cream: "#FAF6EE",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.62)",
-  card: "rgba(250,246,238,0.045)",
-  border: "rgba(255,178,36,0.22)",
-  red: "#E0655F",
-};
 
 type Proof = {
   group: string;
@@ -138,17 +130,10 @@ export default function LiveProof() {
   const hidden = useHidden(40);
   const groups = ["Install", "Enforcement", "Typed-data gate"];
   return (
-    <section
-      id="live-proof"
-      style={{
-        background: TOKENS.bg,
-        color: TOKENS.textDark,
-        padding: "clamp(96px, 10vw, 128px) 24px",
-      }}
-    >
+    <CarrySection id="live-proof" number="04" label="Live proof">
       <style>{`
         .proof-card { transition: border-color 0.25s ease, transform 0.25s ease; }
-        .proof-card:hover { border-color: rgba(255,178,36,0.5); transform: translateY(-2px); }
+        .proof-card:hover { border-color: rgba(77,162,255,0.5); transform: translateY(-2px); }
         @media (prefers-reduced-motion: reduce) {
           .proof-card { transition: none; }
           .proof-card:hover { transform: none; }
@@ -159,138 +144,68 @@ export default function LiveProof() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.7, ease: EASE_OUT }}
-        style={{ maxWidth: 1080, margin: "0 auto" }}
       >
-        <p
-          style={{
-            color: TOKENS.amber,
-            letterSpacing: "0.22em",
-            textTransform: "uppercase",
-            fontSize: 13,
-            fontWeight: 700,
-            margin: "0 0 16px",
-          }}
-        >
-          Live proof
-        </p>
-        <h2
-          style={{
-            fontSize: "clamp(30px, 4.5vw, 48px)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.02em",
-            margin: "0 0 12px",
-            fontWeight: 800,
-          }}
-        >
-          Don&rsquo;t trust us. Verify.
-        </h2>
-        <p style={{ color: TOKENS.muted, fontSize: 18, maxWidth: 720, margin: "0 0 48px" }}>
+        <SectionH2>
+          Don&rsquo;t trust us. <span className="text-white/50">Verify.</span>
+        </SectionH2>
+        <SectionBody>
           Every value below is a real Arc mainnet (chain 5042) record from our
           test ledger — the contract, the install userOp, the allowed spend,
           the blocked spend, the revocation. Click any card to check it on the
           Arc explorer yourself.
-        </p>
+        </SectionBody>
 
-        {groups.map((g) => (
-          <div key={g} style={{ marginBottom: 40 }}>
-            <h3
-              style={{
-                fontSize: 14,
-                textTransform: "uppercase",
-                letterSpacing: "0.18em",
-                color: TOKENS.amber,
-                margin: "0 0 16px",
-                fontWeight: 700,
-              }}
-            >
-              {g}
-            </h3>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 16,
-              }}
-            >
-              {PROOFS.filter((p) => p.group === g).map((p, i) => (
-                <motion.div
-                  key={p.value}
-                  initial={hidden}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-40px" }}
-                  transition={{ duration: 0.6, ease: EASE_OUT, delay: (i % 3) * 0.07 }}
-                >
-                <a
-                  href={linkFor(p)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="proof-card"
-                  style={{
-                    display: "block",
-                    background: TOKENS.card,
-                    border: `1px solid ${TOKENS.border}`,
-                    borderRadius: 14,
-                    padding: 20,
-                    textDecoration: "none",
-                    color: "inherit",
-                    height: "100%",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <p style={{ fontWeight: 700, fontSize: 15, margin: "0 0 10px" }}>
-                    {p.label}
-                  </p>
-                  <code
-                    title={p.value}
-                    style={{
-                      display: "inline-block",
-                      fontFamily: "ui-monospace, monospace",
-                      fontSize: 13,
-                      color: TOKENS.amber,
-                      background: "rgba(255,178,36,0.08)",
-                      border: "1px solid rgba(255,178,36,0.25)",
-                      borderRadius: 6,
-                      padding: "6px 10px",
-                      marginBottom: 12,
-                      wordBreak: "break-all",
-                    }}
+        <div className="mt-14">
+          {groups.map((g) => (
+            <div key={g} className="mb-10">
+              <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-[#4da2ff]">
+                {g}
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {PROOFS.filter((p) => p.group === g).map((p, i) => (
+                  <motion.div
+                    key={p.value}
+                    initial={hidden}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-40px" }}
+                    transition={{ duration: 0.6, ease: EASE_OUT, delay: (i % 3) * 0.07 }}
                   >
-                    {short(p.value)}
-                  </code>
-                  <p
-                    style={{
-                      fontSize: 14,
-                      lineHeight: 1.55,
-                      color: TOKENS.muted,
-                      margin: 0,
-                    }}
-                  >
-                    <span style={{ color: TOKENS.textDark, fontWeight: 600 }}>
-                      What it proves:{" "}
-                    </span>
-                    {p.proves}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: TOKENS.amber,
-                      margin: "12px 0 0",
-                      fontWeight: 600,
-                    }}
-                  >
-                    View on Arc explorer ↗
-                  </p>
-                </a>
-                </motion.div>
-              ))}
+                    <a
+                      href={linkFor(p)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="proof-card block h-full min-h-[44px] border border-dashed border-white/20 bg-white/[0.02] p-5 text-white no-underline"
+                    >
+                      <p className="mb-3 text-[15px] font-bold">
+                        {p.label}
+                      </p>
+                      <code
+                        title={p.value}
+                        className="font-geist mb-3 inline-block break-all border border-[#4da2ff]/25 bg-[#4da2ff]/[0.08] px-2.5 py-1.5 text-[13px] text-[#4da2ff]"
+                      >
+                        {short(p.value)}
+                      </code>
+                      <p className="m-0 text-sm leading-[1.55] text-gray-400">
+                        <span className="font-semibold text-white">
+                          What it proves:{" "}
+                        </span>
+                        {p.proves}
+                      </p>
+                      <p className="mb-0 mt-3 text-[13px] font-semibold text-[#4da2ff]">
+                        View on Arc explorer ↗
+                      </p>
+                    </a>
+                  </motion.div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
 
-        <p style={{ color: TOKENS.muted, fontSize: 13, marginTop: 24, maxWidth: 720 }}>
+        <p className="max-w-xl text-[13px] font-light leading-relaxed text-gray-400">
           *no public ERC-4337 v0.7 bundler exists on Arc yet, so userOps were self-relayed; the policy binds account execution either way. sprint gas ≈ 0.25 USDC, no principal lost, keys never printed.
         </p>
       </motion.div>
-    </section>
+    </CarrySection>
   );
 }

@@ -2,25 +2,25 @@
 
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
+import { CarrySection } from "./carry/Section";
 
 /**
  * THE HALL-PASS METAPHOR — the emotional core of the page.
  * "You may leave the room — but only to the bathroom, and only until the bell rings."
  *
- * Design-standard §2 rhythm device: the three bound cards reuse ONE identical
- * module skeleton with swapped content, following the 7-slot pattern:
- * label → contents list → asterisk fine-print → imperative how-to →
- * name as heading → one-line tagline (sentence case, ends with period) → bespoke visual.
+ * Carry-exact shell: numbered label row, blockquote H2 in Satoshi 400,
+ * dark bound cards (the cream slip recut for the dark grammar).
+ * All copy byte-identical; only styling changed.
  */
 
-const STROKE = "#FFB224";
+const STROKE = "#4da2ff";
 
 function PinIcon() {
   return (
     <svg viewBox="0 0 48 48" className="h-16 w-16" fill="none" stroke={STROKE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Map pin marking the one approved destination">
       <path d="M24 42 C24 42 10 26 10 17 a14 14 0 0 1 28 0 C38 26 24 42 24 42 Z" />
       <circle cx="24" cy="17" r="5.5" />
-      <circle cx="24" cy="17" r="10.5" stroke="#121110" strokeWidth="1.5" strokeDasharray="3 3" />
+      <circle cx="24" cy="17" r="10.5" stroke="#4da2ff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
     </svg>
   );
 }
@@ -33,9 +33,9 @@ function CapIcon() {
       <ellipse cx="24" cy="26" rx="13" ry="5" opacity="0.7" />
       <path d="M11 26 v-7 M37 26 v-7" />
       <ellipse cx="24" cy="19" rx="13" ry="5" opacity="0.45" />
-      <path d="M8 10 H40" stroke="#121110" strokeWidth="3" />
-      <path d="M8 10 v-3 M40 10 v-3" stroke="#121110" strokeWidth="3" />
-      <text x="24" y="6.5" textAnchor="middle" fontSize="7" fill="#121110" stroke="none" fontWeight="bold">MAX</text>
+      <path d="M8 10 H40" stroke="#FFFFFF" strokeWidth="3" />
+      <path d="M8 10 v-3 M40 10 v-3" stroke="#FFFFFF" strokeWidth="3" />
+      <text x="24" y="6.5" textAnchor="middle" fontSize="7" fill="#FFFFFF" stroke="none" fontWeight="bold">MAX</text>
     </svg>
   );
 }
@@ -46,7 +46,7 @@ function BellIcon() {
       <path d="M24 6 c-8 0 -13 7 -13 15 v7 l-4 6 h34 l-4 -6 v-7 c0 -8 -5 -15 -13 -15 Z" />
       <circle cx="24" cy="40" r="3" fill={STROKE} stroke="none" />
       <path d="M7 14 q-4 8 0 16 M41 14 q4 8 0 16" opacity="0.7" />
-      <path d="M24 18 v6 l4 3" stroke="#121110" strokeWidth="2.5" />
+      <path d="M24 18 v6 l4 3" stroke="#FFFFFF" strokeWidth="2.5" />
     </svg>
   );
 }
@@ -117,20 +117,20 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.7, ease: EASE_OUT, delay: index * 0.12 }}
       aria-label={card.name}
-      className="relative rounded-2xl border border-[#FFB224]/30 bg-[#FAF6EE] p-7 text-[#121110] shadow-[0_16px_48px_-24px_rgba(255,178,36,0.28)] md:p-8"
+      className="relative border border-dashed border-white/20 bg-white/[0.02] p-7 md:p-8"
     >
       {/* punched hole — the slip hangs on the classroom peg */}
-      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border border-dashed border-[#FFB224]/60 bg-[#121110]" />
+      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border border-dashed border-[#4da2ff]/60 bg-[#050505]" />
 
       {/* 1 · label */}
-      <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#121110]/55">
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/50">
         {card.label}
       </p>
 
       {/* 2 · contents list */}
       <ul className="mt-4 space-y-2">
         {card.contents.map((line) => (
-          <li key={line} className="flex items-start gap-2 text-base leading-[1.6]">
+          <li key={line} className="flex items-start gap-2 text-base font-light leading-[1.6] text-gray-400">
             <svg viewBox="0 0 16 16" className="mt-1 h-4 w-4 shrink-0" fill="none" stroke={STROKE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M3 8.5 L7 12 L13 4" />
             </svg>
@@ -140,22 +140,22 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
       </ul>
 
       {/* 3 · asterisk fine-print */}
-      <p className="mt-4 text-sm leading-relaxed text-[#121110]/60">
+      <p className="mt-4 text-sm font-light leading-relaxed text-gray-400/70">
         <span aria-hidden className="font-bold">*</span> {card.finePrint}
       </p>
 
       {/* 4 · imperative how-to */}
-      <p className="mt-4 border-t border-[#121110]/10 pt-4 text-base leading-relaxed text-[#121110]/80">
+      <p className="mt-4 border-t border-white/10 pt-4 text-base font-light leading-relaxed text-gray-400">
         {card.howTo}
       </p>
 
       {/* 5 · name as heading */}
-      <h3 className="mt-5 text-2xl font-extrabold leading-tight tracking-tight">
+      <h3 className="mt-5 text-2xl font-normal leading-tight tracking-tight text-white">
         {card.name}
       </h3>
 
       {/* 6 · one-line tagline, sentence case, ends with period */}
-      <p className="mt-2 text-lg leading-relaxed text-[#121110]/70">{card.tagline}</p>
+      <p className="mt-2 text-lg font-light leading-relaxed text-gray-400">{card.tagline}</p>
 
       {/* 7 · bespoke visual */}
       <div className="mt-6 flex justify-center">{card.visual}</div>
@@ -164,67 +164,47 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
 }
 
 export default function Metaphor() {
-  const headHidden = useHidden(32);
   const quoteHidden = useHidden(40);
   const tailHidden = useHidden(32);
 
   return (
-    <section
-      id="metaphor"
-      className="relative overflow-hidden bg-[#121110] py-24 md:py-32"
-    >
-      {/* static amber permission ring — ambient, kept quiet */}
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[760px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FFB224]/10" />
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_55%_45%_at_50%_35%,rgba(255,178,36,0.07),transparent)]" />
+    <CarrySection id="metaphor" number="02" label="The idea, in one sentence">
+      <motion.blockquote
+        initial={quoteHidden}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={{ duration: 0.7, ease: EASE_OUT }}
+        className="mx-auto max-w-4xl"
+      >
+        <p className="text-3xl font-normal leading-[1.12] tracking-tight text-white md:text-5xl">
+          &ldquo;You may leave the room —{" "}
+          <span className="text-[#4da2ff]">but only to the bathroom,</span>{" "}
+          and only until the{" "}
+          <span className="text-[#4da2ff]">bell rings</span>.&rdquo;
+        </p>
+        <footer className="mt-6 text-base font-light leading-[1.6] text-gray-400">
+          Every schoolkid knows this deal. Your AI agent is about to learn it too.
+        </footer>
+      </motion.blockquote>
 
-      <div className="relative mx-auto max-w-6xl px-6 md:px-10">
-        <motion.p
-          initial={headHidden}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.6, ease: EASE_OUT }}
-          className="mb-6 text-center text-[13px] font-bold uppercase tracking-[0.22em] text-[#FFB224]"
-        >
-          The idea, in one sentence.
-        </motion.p>
-
-        <motion.blockquote
-          initial={quoteHidden}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="mx-auto max-w-4xl text-center"
-        >
-          <p className="text-3xl font-black leading-[1.12] tracking-tight text-[#FFF9EF] md:text-5xl">
-            &ldquo;You may leave the room —{" "}
-            <span className="text-[#FFB224]">but only to the bathroom,</span>{" "}
-            and only until the{" "}
-            <span className="text-[#FFB224]">bell rings</span>.&rdquo;
-          </p>
-          <footer className="mt-6 text-base leading-[1.6] text-[#FFF9EF]/60">
-            Every schoolkid knows this deal. Your AI agent is about to learn it too.
-          </footer>
-        </motion.blockquote>
-
-        <div className="mt-16 grid gap-8 md:mt-24 md:grid-cols-3 md:gap-6 lg:gap-10">
-          {CARDS.map((card, i) => (
-            <BoundModule key={card.key} card={card} index={i} />
-          ))}
-        </div>
-
-        <motion.p
-          initial={tailHidden}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="mx-auto mt-14 max-w-2xl text-center text-lg leading-[1.6] text-[#FFF9EF]/70 md:mt-20"
-        >
-          That slip of paper runs <span className="font-semibold text-[#FFF9EF]">on-chain</span>,
-          enforced by your own smart account — not by a promise, not by a server
-          that could be talked out of it. The account checks the pass on every
-          spend, and <span className="font-semibold text-[#FFB224]">amber means go</span>.
-        </motion.p>
+      <div className="mt-16 grid gap-8 md:mt-24 md:grid-cols-3 md:gap-6 lg:gap-10">
+        {CARDS.map((card, i) => (
+          <BoundModule key={card.key} card={card} index={i} />
+        ))}
       </div>
-    </section>
+
+      <motion.p
+        initial={tailHidden}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.7, ease: EASE_OUT }}
+        className="mx-auto mt-14 max-w-md text-lg font-light leading-relaxed text-gray-400 md:mt-20"
+      >
+        That slip of paper runs <span className="font-normal text-white">on-chain</span>,
+        enforced by your own smart account — not by a promise, not by a server
+        that could be talked out of it. The account checks the pass on every
+        spend, and <span className="font-normal text-[#4da2ff]">amber means go</span>.
+      </motion.p>
+    </CarrySection>
   );
 }

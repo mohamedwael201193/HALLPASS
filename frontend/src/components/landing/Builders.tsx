@@ -2,19 +2,13 @@
  * Builders — the real install call shape. Source: hallpass-build-bible.md
  * §4 (verified selectors, manifest rule) and §5 (install flow). The plugin
  * address and manifest hash below are the proven mainnet deployment.
+ *
+ * Carry-exact shell; all copy byte-identical.
  */
 
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
-
-const TOKENS = {
-  bg: "#121110",
-  amber: "#FFB224",
-  cream: "#FAF6EE",
-  textDark: "#FFF9EF",
-  muted: "rgba(255,249,239,0.62)",
-  border: "rgba(255,178,36,0.22)",
-};
+import { CarrySection, SectionH2, SectionBody } from "./carry/Section";
 
 const SNIPPET = `// Install Hallpass on any Circle smart account (ERC-6900 v0.7, Arc mainnet)
 // Proven plugin: 0x5780e3DEd211ee13494909432C89Be7b8D6441A3
@@ -34,95 +28,41 @@ account.installPlugin(
 export default function Builders() {
   const hidden = useHidden(40);
   return (
-    <section
-      id="builders"
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
-    >
+    <CarrySection id="builders" number="06" label="For builders">
       <style>{`
-        .builder-btn { transition: background 0.2s ease, color 0.2s ease; }
-        .builder-btn:hover { background: #FFB224 !important; color: #121110 !important; }
+        .builder-btn { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+        .builder-btn:hover { background: rgba(77,162,255,0.12) !important; border-color: #4da2ff !important; color: #4da2ff !important; }
       `}</style>
       <motion.div
         initial={hidden}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.7, ease: EASE_OUT }}
-        style={{ maxWidth: 1080, margin: "0 auto" }}
       >
-        <p
-          style={{
-            color: TOKENS.amber,
-            letterSpacing: "0.22em",
-            textTransform: "uppercase",
-            fontSize: 13,
-            fontWeight: 700,
-            margin: "0 0 16px",
-          }}
-        >
-          For builders
-        </p>
-        <h2
-          style={{
-            fontSize: "clamp(30px, 4.5vw, 48px)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.02em",
-            margin: "0 0 12px",
-            fontWeight: 800,
-          }}
-        >
-          One call. That&rsquo;s the integration.
-        </h2>
-        <p style={{ color: TOKENS.muted, fontSize: 18, maxWidth: 720, margin: "0 0 32px" }}>
+        <SectionH2>
+          One call. <span className="text-white/50">That&rsquo;s the integration.</span>
+        </SectionH2>
+        <SectionBody>
           Install the plugin on any Circle smart account and every spend your
           agent makes goes through the policy gate — caps, windows, expiry,
           allowlists, typed data. The snippet below is the real call shape.
-        </p>
-        <pre
-          style={{
-            background: "#0C0B0A",
-            border: `1px solid ${TOKENS.border}`,
-            borderRadius: 14,
-            padding: 24,
-            overflowX: "auto",
-            fontSize: 14,
-            lineHeight: 1.7,
-            color: TOKENS.cream,
-            fontFamily: "ui-monospace, SFMono-Regular, monospace",
-            margin: "0 0 24px",
-          }}
-        >
+        </SectionBody>
+        <pre className="font-geist mb-6 mt-10 overflow-x-auto border border-dashed border-white/20 bg-[#030303] p-6 text-sm leading-[1.7] text-gray-200">
           {SNIPPET}
         </pre>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            alignItems: "center",
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-3">
           <a
             href="#live-proof"
-            className="builder-btn"
-            style={{
-              display: "inline-block",
-              background: "transparent",
-              color: TOKENS.amber,
-              fontWeight: 700,
-              padding: "12px 24px",
-              borderRadius: 10,
-              textDecoration: "none",
-              border: `2px solid ${TOKENS.amber}`,
-            }}
+            className="builder-btn inline-flex min-h-[44px] items-center border-2 border-[#4da2ff]/60 bg-transparent px-6 py-3 font-bold text-[#4da2ff] no-underline"
           >
             See the proof on-chain
           </a>
-          <p style={{ color: TOKENS.muted, fontSize: 14, margin: 0 }}>
+          <p className="m-0 text-sm font-light text-gray-400">
             Full install flows and contract specs ship in the HALLPASS build
             bible (the project&rsquo;s technical reference).
           </p>
         </div>
       </motion.div>
-    </section>
+    </CarrySection>
   );
 }

@@ -1,0 +1,157 @@
+@import "@fontsource/geist-mono";
+
+/* ------------------------------------------------------------------ */
+/* CARRY-EXACT landing grammar (2026-10-15, usecarry.xyz visual spec). */
+/* Landing-scoped: everything below lives under .carry-landing so the  */
+/* /app dashboard is untouched. No blur() filters anywhere.            */
+/* ------------------------------------------------------------------ */
+
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/satoshi-300.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/satoshi-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/satoshi-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/satoshi-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.carry-landing {
+  position: relative;
+  background-color: #050505;
+  color: #ffffff;
+  font-family: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.carry-landing h1,
+.carry-landing h2,
+.carry-landing h3 {
+  font-family: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* faint 64px grid, masked to the top — exact carry spec */
+.carry-landing::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(
+    ellipse 85% 55% at 50% 0%,
+    black,
+    transparent 80%
+  );
+  mask-image: radial-gradient(
+    ellipse 85% 55% at 50% 0%,
+    black,
+    transparent 80%
+  );
+}
+
+/* top blue glow — exact carry spec: 1100x620 rounded-full, closest-side */
+.carry-landing::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1100px;
+  height: 620px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    closest-side,
+    rgba(77, 162, 255, 0.06),
+    transparent
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.carry-landing > * {
+  position: relative;
+  z-index: 1;
+}
+
+.carry-landing ::selection {
+  background: #4da2ff;
+  color: #050505;
+}
+
+/* Geist Mono utility for the carry label row / microcopy */
+.font-geist {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* hero beams mask: light beam pours from the top-center, fades out */
+.carry-beam-mask {
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 0%,
+    black 20%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 0%,
+    black 20%,
+    transparent 78%
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Tag mark stroke-draw animation — original SVG in the spirit of       */
+/* pixel-perfect.space: one path draws itself via stroke-dasharray.    */
+/* Dependency-free, reduced-motion safe.                               */
+/* ------------------------------------------------------------------ */
+.tag-draw-path {
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+  animation: tag-draw 1.4s ease-out 0.15s forwards;
+}
+.tag-draw-hole {
+  opacity: 0;
+  animation: tag-hole-in 0.5s ease-out 1.1s forwards;
+}
+@keyframes tag-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes tag-hole-in {
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag-draw-path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .tag-draw-hole {
+    animation: none;
+    opacity: 1;
+  }
+}

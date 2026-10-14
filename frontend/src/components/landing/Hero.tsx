@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { motion, MotionConfig } from "framer-motion";
-import Logo from "./Logo";
-import Aurora, { TagMark } from "./hero/Aurora";
-import "./hero/hero-motion.css";
+import { motion, MotionConfig, useReducedMotion } from "framer-motion";
+import TagMark from "./Logo";
+import { GradientCta } from "./carry/Section";
+import { Beams } from "../../vendor/reactbits/Beams/Beams";
+import DotGrid from "../../vendor/reactbits/DotGrid/DotGrid";
 
 type Stats = {
   accounts: number;
@@ -48,121 +49,129 @@ function useLiveStats(): Stats | null {
   return stats;
 }
 
-const HEADLINE_LINES: { words: string[]; accent?: boolean }[] = [
-  { words: ["KEYS"] },
-  { words: ["WITH", "A"] },
-  { words: ["BOUNCER."], accent: true },
-];
-
-const TICKER = "POLICIES, ENFORCED. · SESSIONS, SCOPED. · REVOCABLE ANYTIME. · PROVEN ON MAINNET. · ";
+const rise = (delay: number) => ({
+  initial: { opacity: 0, y: 22 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.7, ease: "easeOut" as const, delay },
+});
 
 /**
- * Hero (redesign 2026-10-14 — founder verdict: the 12.5vw headline was too
- * loud, the giant static tag image is gone).
+ * Hero — carry-exact (2026-10-15, usecarry.xyz visual spec).
  *
- * Composition: centered, calm, editorial. Eyebrow → confident-but-refined
- * all-caps display headline at ~7.5vw → parenthetical italic subhead →
- * two CTAs. Behind it all, a LIVING background (CSS/SVG only, see
- * hero/Aurora.tsx + hero-motion.css): slow amber aurora drifts, a subtle
- * beam sweep, faint particles, and a ghost stroke-only hall-pass tag —
- * elegant, never a rave. Entrance motion is opacity + translateY ≤0.8s,
- * reduced-motion safe via MotionConfig + the reduced-motion block in
- * hero-motion.css. Marquee anchors the bottom of the hero.
+ * Background: DotGrid (dots tinted #4da2ff at low opacity, radial edge fade)
+ * + Beams (color '#4da2ff', restrained speed) as the top-center light beam.
+ * Both are dependency-free WebGL; paused={true} under reduced motion.
+ *
+ * Typography: Satoshi 400 H1 (text-5xl → md:text-6xl → lg:text-[4.5rem],
+ * leading 1.05, tracking-tight, white, explicit two-line break), Satoshi 300
+ * text-xl gray-400 subcopy. CTA row: gradient-border primary + outline
+ * secondary. Microcopy in Geist Mono. No blur() anywhere.
  */
 export default function Hero() {
   const stats = useLiveStats();
+  const reduceMotion = useReducedMotion();
 
   return (
     <MotionConfig reducedMotion="user">
-      <section id="top" className="relative overflow-hidden bg-[#121110] text-[#FFF9EF]">
-        {/* living background: aurora + beam + particles + ghost tag motif */}
-        <Aurora />
+      <section
+        id="top"
+        className="relative mx-auto w-full max-w-7xl overflow-hidden border-x border-dashed border-white/20 px-6 pb-24 pt-16 text-center md:pb-32 md:pt-32"
+      >
+        {/* living background: blue dot field + top-center light beam */}
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <DotGrid
+            className="absolute inset-0"
+            dotSize={4}
+            gap={20}
+            baseColor="#16233f"
+            activeColor="#4da2ff"
+            fade={0.9}
+            opacity={0.55}
+            mouseInteraction={false}
+            clickShock={false}
+            intro={!reduceMotion}
+            paused={reduceMotion ?? false}
+          />
+          <div className="carry-beam-mask absolute inset-x-0 top-0 h-[560px]">
+            <Beams
+              color="#4da2ff"
+              beamWidth={120}
+              speed={0.4}
+              brightness={1.2}
+              glow={0.5}
+              fillLight={0.25}
+              opacity={0.7}
+              fade={0.5}
+              mouseInteraction={false}
+              intro={!reduceMotion}
+              paused={reduceMotion ?? false}
+            />
+          </div>
+        </div>
 
-        {/* film-grain texture */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-[5] opacity-[0.05] [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22/></filter><rect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.6%22/></svg>')]"
-        />
-
-        {/* ---- content: centered, calm, generous whitespace ---- */}
-        <div className="relative z-10 mx-auto flex min-h-[92vh] w-full max-w-4xl flex-col items-center justify-center px-6 pb-20 pt-32 text-center md:pt-36">
+        {/* ---- content: centered, minimal ---- */}
+        <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center">
           {/* eyebrow */}
           <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="flex items-center gap-3"
+            {...rise(0)}
+            className="mb-6 flex items-center gap-3"
           >
-            <Logo size={26} />
-            <span className="text-[13px] font-extrabold uppercase tracking-[0.35em] text-[#FFF9EF]/75">
-              Hall&nbsp;Pass&nbsp;&nbsp;·&nbsp;&nbsp;ERC-6900 policy plugins
+            <TagMark size={16} />
+            <span className="text-[11px] tracking-[0.3em] text-white/50">
+              HALL&nbsp;PASS&nbsp;·&nbsp;ERC-6900&nbsp;POLICY&nbsp;PLUGINS
             </span>
-            <TagMark className="h-4 w-4 text-[#FFB224]" />
           </motion.div>
 
-          {/* the headline — confident, not loud */}
-          <h1 className="mt-10 font-display text-[clamp(2.75rem,7.5vw,7.5rem)] font-black uppercase leading-[0.92] tracking-tight">
-            {HEADLINE_LINES.map((line, li) => (
-              <span key={li} className="block">
-                {line.words.map((word, wi) => (
-                  <motion.span
-                    key={wi}
-                    initial={{ opacity: 0, y: 26 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      duration: 0.7,
-                      ease: "easeOut",
-                      delay: 0.12 + (li * 2 + wi) * 0.08,
-                    }}
-                    className={`inline-block ${line.accent ? "text-[#FFB224]" : ""}`}
-                  >
-                    {word}
-                    {wi < line.words.length - 1 ? " " : ""}
-                  </motion.span>
-                ))}
-              </span>
-            ))}
-          </h1>
-
-          {/* parenthetical italic subhead */}
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.55, ease: "easeOut" }}
-            className="mt-10 max-w-[54ch] text-lg italic leading-[1.6] text-[#FAF6EE]/75 md:text-xl"
+          {/* headline — calm, centered, Satoshi 400, explicit two-line break */}
+          <motion.h1
+            {...rise(0.12)}
+            className="mb-6 text-5xl font-normal leading-[1.05] tracking-tight text-white md:text-6xl lg:text-[4.5rem]"
           >
-            (Session-key plugins for agent smart wallets — your agent spends
-            inside the bounds you set, and everything else reverts on-chain.)
+            Give your agent a{" "}<br className="hidden md:block" />
+            <span className="text-[#4da2ff]">hall&nbsp;pass,</span> not your
+            keys.
+          </motion.h1>
+
+          {/* subcopy — Satoshi 300, text-xl, gray-400 */}
+          <motion.p
+            {...rise(0.26)}
+            className="mx-auto mb-10 max-w-2xl text-xl font-light leading-relaxed text-gray-400"
+          >
+            Session-key plugins for agent smart wallets. Set the bounds —
+            spend caps, allowed targets, expiry — and everything outside them
+            reverts on-chain. Revoke anytime.
           </motion.p>
 
-          {/* CTAs */}
+          {/* CTA row */}
           <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.7, ease: "easeOut" }}
-            className="mt-12 flex w-full flex-col items-center gap-4 sm:w-auto sm:flex-row sm:items-center"
+            {...rise(0.4)}
+            className="flex flex-col items-center gap-6 sm:flex-row"
           >
-            <a
-              href="/app"
-              className="inline-flex min-h-[56px] w-full items-center justify-center rounded-full bg-[#FFB224] px-10 text-base font-bold text-[#121110] transition-transform duration-200 hover:scale-[1.04] active:scale-[0.98] sm:w-auto"
-            >
-              Install the plugin
-            </a>
+            <GradientCta href="/app">Install the plugin</GradientCta>
             <a
               href="#live-proof"
-              className="inline-flex min-h-[56px] w-full items-center justify-center rounded-full border border-[#FFF9EF]/30 px-10 text-base font-semibold text-[#FFF9EF] transition-colors hover:border-[#FFB224] hover:text-[#FFB224] sm:w-auto"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-none border border-white/20 bg-white/5 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-colors hover:bg-white/15"
             >
               See live proof
             </a>
           </motion.div>
+
+          {/* microcopy */}
+          <motion.p
+            {...rise(0.52)}
+            className="font-geist mt-10 text-[10px] uppercase tracking-[0.25em] text-white/60"
+          >
+            Proven on Arc mainnet&nbsp;&nbsp;·&nbsp;&nbsp;Revocable
+            anytime&nbsp;&nbsp;·&nbsp;&nbsp;No custody
+          </motion.p>
 
           {/* live-stats row: real values only — omitted otherwise */}
           {stats !== null && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="mt-16 grid w-full max-w-3xl grid-cols-3 gap-6 border-t border-[#FFF9EF]/10 pt-8 text-left"
+              transition={{ duration: 0.6, delay: 0.65 }}
+              className="mt-14 grid w-full max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8 text-center"
               aria-live="polite"
             >
               {(
@@ -173,39 +182,16 @@ export default function Hero() {
                 ] as const
               ).map((s) => (
                 <div key={s.label}>
-                  <div className="font-display text-4xl font-extrabold tabular-nums text-[#FFF9EF] md:text-5xl">
+                  <div className="text-3xl font-normal tabular-nums text-white md:text-4xl">
                     {s.value.toLocaleString()}
                   </div>
-                  <div className="mt-2 text-xs font-medium uppercase tracking-[0.18em] text-[#FFF9EF]/50">
+                  <div className="font-geist mt-2 text-[10px] uppercase tracking-[0.2em] text-white/40">
                     {s.label}
                   </div>
                 </div>
               ))}
             </motion.div>
           )}
-        </div>
-
-        {/* ---- marquee anchors the hero bottom ---- */}
-        <div
-          className="ticker relative z-10 overflow-hidden border-y border-[#FFB224]/15 bg-[#121110]/80 py-4 backdrop-blur-sm"
-          aria-hidden="true"
-        >
-          <div className="ticker-track flex w-max whitespace-nowrap">
-            {[0, 1].map((i) => (
-              <span
-                key={i}
-                className="pr-4 text-lg font-extrabold uppercase tracking-[0.25em] text-[#FFB224]"
-              >
-                {TICKER.repeat(4)}
-              </span>
-            ))}
-          </div>
-          <style>{`
-            .ticker-track { animation: ticker-x 28s linear infinite; }
-            .ticker:hover .ticker-track { animation-play-state: paused; }
-            @keyframes ticker-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-            @media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
-          `}</style>
         </div>
       </section>
     </MotionConfig>
