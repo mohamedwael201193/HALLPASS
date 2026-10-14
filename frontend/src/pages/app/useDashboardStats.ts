@@ -23,7 +23,7 @@ import {
   PLUGIN_ADDRESS,
   USDC_ADDRESS,
   getTokenBalance,
-  pluginAbi,
+  parsedPluginAbi,
   publicClient,
 } from '../../lib/contracts';
 import { WALLET_SETUP_ERROR } from '../../lib/wagmi';
@@ -75,7 +75,7 @@ async function readAccountSession(
     PLUGIN_ADDRESS
       ? (publicClient.readContract({
           address: PLUGIN_ADDRESS,
-          abi: pluginAbi,
+          abi: parsedPluginAbi,
           functionName: 'policies',
           args: [account],
         }) as Promise<readonly unknown[]>)

@@ -26,7 +26,7 @@ import TokenIcon from './TokenIcon';
 import {
   EURC_ADDRESS,
   USDC_ADDRESS,
-  erc20Abi,
+  parsedErc20Abi,
   formatEurc,
   formatNativeUsdc,
   publicClient,
@@ -65,13 +65,13 @@ export function useTokenBalances(address?: Address): TokenBalances & { refetch: 
       const [usdc, eurc] = await Promise.all([
         publicClient.readContract({
           address: USDC_ADDRESS,
-          abi: erc20Abi,
+          abi: parsedErc20Abi,
           functionName: 'balanceOf',
           args: [address],
         }),
         publicClient.readContract({
           address: EURC_ADDRESS,
-          abi: erc20Abi,
+          abi: parsedErc20Abi,
           functionName: 'balanceOf',
           args: [address],
         }),
@@ -350,14 +350,14 @@ export default function GetEurcPanel({ address, title }: GetEurcPanelProps) {
       if (approvalAddr && isAddress(approvalAddr) && approvalAddr !== zeroAddress) {
         const allowance = (await publicClient.readContract({
           address: USDC_ADDRESS,
-          abi: erc20Abi,
+          abi: parsedErc20Abi,
           functionName: 'allowance',
           args: [connected, approvalAddr],
         })) as bigint;
         if (allowance < fromAmount) {
           const approveHash = await walletClient.writeContract({
             address: USDC_ADDRESS,
-            abi: erc20Abi,
+            abi: parsedErc20Abi,
             functionName: 'approve',
             args: [approvalAddr, fromAmount],
             account: connected,

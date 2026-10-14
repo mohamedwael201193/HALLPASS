@@ -4,7 +4,7 @@ import { useWalletClient } from 'wagmi'
 import { type Address, type Hex, isAddress } from 'viem'
 import { useHallpass } from '../../lib/useHallpass'
 import {
-  accountAbi,
+  parsedAccountAbi,
   usdcToNativeWei,
   USDC_ADDRESS,
   EURC_ADDRESS,
@@ -374,7 +374,7 @@ function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
     try {
       const txHash = await walletClient.writeContract({
         address: accountAddress,
-        abi: accountAbi,
+        abi: parsedAccountAbi,
         functionName: 'uninstallPlugin',
         args: [plugin, '0x' as Hex, '0x' as Hex],
         account: hp.address,
