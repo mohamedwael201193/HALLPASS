@@ -1,0 +1,59 @@
+/**
+ * dotmatrix-motion.css — keyframes for the DotMatrix hero background.
+ *
+ * transform / opacity ONLY (GPU-composited). Calm durations: 12–60s.
+ * Nothing here may use blur(), backdrop-filter, or layout properties.
+ */
+
+.hp-dots-far {
+  animation: hp-drift-far 60s linear infinite;
+  will-change: transform;
+}
+.hp-dots-near {
+  animation: hp-drift-near 90s linear infinite;
+  will-change: transform;
+}
+.hp-beam,
+.hp-beam-core {
+  animation: hp-breathe 12s ease-in-out infinite;
+  will-change: opacity;
+}
+.hp-mote {
+  animation-name: hp-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+@keyframes hp-drift-far {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-52px, -26px, 0); }
+}
+@keyframes hp-drift-near {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(52px, -52px, 0); }
+}
+@keyframes hp-breathe {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
+}
+@keyframes hp-rise {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  12%  { opacity: 0.7; }
+  75%  { opacity: 0.45; }
+  100% { transform: translate3d(0, -46vh, 0); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-dots-far,
+  .hp-dots-near,
+  .hp-beam,
+  .hp-beam-core,
+  .hp-mote {
+    animation: none;
+  }
+  .hp-mote {
+    opacity: 0.35;
+  }
+}

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, MotionConfig } from "framer-motion";
 import Logo from "./Logo";
-import Aurora, { TagMark } from "./hero/Aurora";
-import "./hero/hero-motion.css";
+import DotMatrix from "./hero/DotMatrix";
+import "./hero/dotmatrix-motion.css";
 
 type Stats = {
   accounts: number;
@@ -48,121 +48,104 @@ function useLiveStats(): Stats | null {
   return stats;
 }
 
-const HEADLINE_LINES: { words: string[]; accent?: boolean }[] = [
-  { words: ["KEYS"] },
-  { words: ["WITH", "A"] },
-  { words: ["BOUNCER."], accent: true },
-];
-
-const TICKER = "POLICIES, ENFORCED. · SESSIONS, SCOPED. · REVOCABLE ANYTIME. · PROVEN ON MAINNET. · ";
+const rise = (delay: number) => ({
+  initial: { opacity: 0, y: 22 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.7, ease: "easeOut" as const, delay },
+});
 
 /**
- * Hero (redesign 2026-10-14 — founder verdict: the 12.5vw headline was too
- * loud, the giant static tag image is gone).
+ * Hero (rebuild 2026-10-14 — founder order: rebuild in the SPIRIT of
+ * usecarry.xyz, adapted to HALLPASS, never a copy).
  *
- * Composition: centered, calm, editorial. Eyebrow → confident-but-refined
- * all-caps display headline at ~7.5vw → parenthetical italic subhead →
- * two CTAs. Behind it all, a LIVING background (CSS/SVG only, see
- * hero/Aurora.tsx + hero-motion.css): slow amber aurora drifts, a subtle
- * beam sweep, faint particles, and a ghost stroke-only hall-pass tag —
- * elegant, never a rave. Entrance motion is opacity + translateY ≤0.8s,
- * reduced-motion safe via MotionConfig + the reduced-motion block in
- * hero-motion.css. Marquee anchors the bottom of the hero.
+ * CARRY's grammar, our voice: deep warm-black field, a fine dotted
+ * dot-matrix particle field, one soft shaft of AMBER light pouring from
+ * the top-center, a huge calm centered headline in sentence case, muted
+ * gray subcopy, two CTAs (filled gradient + outlined), and a tiny
+ * letterspaced microcopy line beneath.
+ *
+ * Palette: #121110 bg, #FFB224 amber, #FAF6EE cream. Headline set in
+ * Inter semibold with tight tracking — confident and calm, never loud.
+ * Entrance motion is opacity + translateY ≤0.8s, reduced-motion safe.
  */
 export default function Hero() {
   const stats = useLiveStats();
 
   return (
     <MotionConfig reducedMotion="user">
-      <section id="top" className="relative overflow-hidden bg-[#121110] text-[#FFF9EF]">
-        {/* living background: aurora + beam + particles + ghost tag motif */}
-        <Aurora />
+      <section
+        id="top"
+        className="relative overflow-hidden bg-[#121110] text-[#FAF6EE]"
+      >
+        {/* living background: dot matrix + amber beam + rising motes */}
+        <DotMatrix />
 
-        {/* film-grain texture */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-[5] opacity-[0.05] [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22/></filter><rect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.6%22/></svg>')]"
-        />
-
-        {/* ---- content: centered, calm, generous whitespace ---- */}
-        <div className="relative z-10 mx-auto flex min-h-[92vh] w-full max-w-4xl flex-col items-center justify-center px-6 pb-20 pt-32 text-center md:pt-36">
+        {/* ---- content: centered, minimal, generous whitespace ---- */}
+        <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-4xl flex-col items-center justify-center px-6 pb-24 pt-36 text-center">
           {/* eyebrow */}
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="flex items-center gap-3"
-          >
-            <Logo size={26} />
-            <span className="text-[13px] font-extrabold uppercase tracking-[0.35em] text-[#FFF9EF]/75">
+          <motion.div {...rise(0)} className="flex items-center gap-3">
+            <Logo size={22} />
+            <span className="text-[12px] font-bold uppercase tracking-[0.4em] text-[#FAF6EE]/60">
               Hall&nbsp;Pass&nbsp;&nbsp;·&nbsp;&nbsp;ERC-6900 policy plugins
             </span>
-            <TagMark className="h-4 w-4 text-[#FFB224]" />
           </motion.div>
 
-          {/* the headline — confident, not loud */}
-          <h1 className="mt-10 font-display text-[clamp(2.75rem,7.5vw,7.5rem)] font-black uppercase leading-[0.92] tracking-tight">
-            {HEADLINE_LINES.map((line, li) => (
-              <span key={li} className="block">
-                {line.words.map((word, wi) => (
-                  <motion.span
-                    key={wi}
-                    initial={{ opacity: 0, y: 26 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      duration: 0.7,
-                      ease: "easeOut",
-                      delay: 0.12 + (li * 2 + wi) * 0.08,
-                    }}
-                    className={`inline-block ${line.accent ? "text-[#FFB224]" : ""}`}
-                  >
-                    {word}
-                    {wi < line.words.length - 1 ? " " : ""}
-                  </motion.span>
-                ))}
-              </span>
-            ))}
-          </h1>
-
-          {/* parenthetical italic subhead */}
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.55, ease: "easeOut" }}
-            className="mt-10 max-w-[54ch] text-lg italic leading-[1.6] text-[#FAF6EE]/75 md:text-xl"
+          {/* headline — calm, centered, sentence case */}
+          <motion.h1
+            {...rise(0.12)}
+            className="mt-8 max-w-[20ch] text-[clamp(2.6rem,5.6vw,5rem)] font-semibold leading-[1.04] tracking-[-0.02em] text-[#FAF6EE]"
           >
-            (Session-key plugins for agent smart wallets — your agent spends
-            inside the bounds you set, and everything else reverts on-chain.)
+            Give your agent a{" "}
+            <span className="text-[#FFB224]">hall&nbsp;pass</span>,
+            <br />
+            not your keys.
+          </motion.h1>
+
+          {/* subcopy — muted gray */}
+          <motion.p
+            {...rise(0.26)}
+            className="mt-7 max-w-[52ch] text-base leading-[1.7] text-[#FAF6EE]/55 md:text-lg"
+          >
+            Session-key plugins for agent smart wallets. Set the bounds —
+            spend caps, allowed targets, expiry — and everything outside them
+            reverts on-chain. Revoke anytime.
           </motion.p>
 
           {/* CTAs */}
           <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.7, ease: "easeOut" }}
-            className="mt-12 flex w-full flex-col items-center gap-4 sm:w-auto sm:flex-row sm:items-center"
+            {...rise(0.4)}
+            className="mt-11 flex w-full flex-col items-center gap-4 sm:w-auto sm:flex-row"
           >
             <a
               href="/app"
-              className="inline-flex min-h-[56px] w-full items-center justify-center rounded-full bg-[#FFB224] px-10 text-base font-bold text-[#121110] transition-transform duration-200 hover:scale-[1.04] active:scale-[0.98] sm:w-auto"
+              className="inline-flex min-h-[52px] w-full items-center justify-center rounded-md bg-gradient-to-b from-[#FFC95C] to-[#FFB224] px-9 text-[15px] font-bold tracking-wide text-[#121110] shadow-[0_0_0_1px_rgba(255,178,36,0.55),0_8px_32px_-8px_rgba(255,178,36,0.45)] transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98] sm:w-auto"
             >
               Install the plugin
             </a>
             <a
               href="#live-proof"
-              className="inline-flex min-h-[56px] w-full items-center justify-center rounded-full border border-[#FFF9EF]/30 px-10 text-base font-semibold text-[#FFF9EF] transition-colors hover:border-[#FFB224] hover:text-[#FFB224] sm:w-auto"
+              className="inline-flex min-h-[52px] w-full items-center justify-center rounded-md border border-[#FAF6EE]/25 px-9 text-[15px] font-semibold tracking-wide text-[#FAF6EE]/85 transition-colors hover:border-[#FFB224]/70 hover:text-[#FFB224] sm:w-auto"
             >
               See live proof
             </a>
           </motion.div>
+
+          {/* microcopy */}
+          <motion.p
+            {...rise(0.52)}
+            className="mt-9 text-[11px] font-medium uppercase tracking-[0.32em] text-[#FAF6EE]/35"
+          >
+            Proven on Arc mainnet&nbsp;&nbsp;·&nbsp;&nbsp;Revocable
+            anytime&nbsp;&nbsp;·&nbsp;&nbsp;No custody
+          </motion.p>
 
           {/* live-stats row: real values only — omitted otherwise */}
           {stats !== null && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="mt-16 grid w-full max-w-3xl grid-cols-3 gap-6 border-t border-[#FFF9EF]/10 pt-8 text-left"
+              transition={{ duration: 0.6, delay: 0.65 }}
+              className="mt-16 grid w-full max-w-2xl grid-cols-3 gap-6 border-t border-[#FAF6EE]/10 pt-8 text-center"
               aria-live="polite"
             >
               {(
@@ -173,39 +156,16 @@ export default function Hero() {
                 ] as const
               ).map((s) => (
                 <div key={s.label}>
-                  <div className="font-display text-4xl font-extrabold tabular-nums text-[#FFF9EF] md:text-5xl">
+                  <div className="text-3xl font-semibold tabular-nums text-[#FAF6EE] md:text-4xl">
                     {s.value.toLocaleString()}
                   </div>
-                  <div className="mt-2 text-xs font-medium uppercase tracking-[0.18em] text-[#FFF9EF]/50">
+                  <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[#FAF6EE]/40">
                     {s.label}
                   </div>
                 </div>
               ))}
             </motion.div>
           )}
-        </div>
-
-        {/* ---- marquee anchors the hero bottom ---- */}
-        <div
-          className="ticker relative z-10 overflow-hidden border-y border-[#FFB224]/15 bg-[#121110]/80 py-4 backdrop-blur-sm"
-          aria-hidden="true"
-        >
-          <div className="ticker-track flex w-max whitespace-nowrap">
-            {[0, 1].map((i) => (
-              <span
-                key={i}
-                className="pr-4 text-lg font-extrabold uppercase tracking-[0.25em] text-[#FFB224]"
-              >
-                {TICKER.repeat(4)}
-              </span>
-            ))}
-          </div>
-          <style>{`
-            .ticker-track { animation: ticker-x 28s linear infinite; }
-            .ticker:hover .ticker-track { animation-play-state: paused; }
-            @keyframes ticker-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-            @media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
-          `}</style>
         </div>
       </section>
     </MotionConfig>
