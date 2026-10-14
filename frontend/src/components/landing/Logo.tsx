@@ -27,13 +27,13 @@ export default function TagMark({
       <path
         className="tag-draw-path"
         d="M24 4 C17 4 12 9 12 15 L12 21 L8 25 L8 40 C8 42.2 9.8 44 12 44 L36 44 C38.2 44 40 42.2 40 40 L40 25 L36 21 L36 15 C36 9 31 4 24 4 Z"
-        stroke="#4da2ff"
+        stroke="#FFB224"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       {/* punched hole — fades in after the draw completes */}
-      <circle className="tag-draw-hole" cx="24" cy="12" r="3.2" fill="none" stroke="#4da2ff" strokeWidth="2.5" />
+      <circle className="tag-draw-hole" cx="24" cy="12" r="3.2" fill="none" stroke="#FFB224" strokeWidth="2.5" />
     </svg>
   );
 }

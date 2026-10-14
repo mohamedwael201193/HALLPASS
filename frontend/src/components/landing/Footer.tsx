@@ -29,7 +29,7 @@ export default function Footer() {
     <footer className="relative mx-auto w-full max-w-7xl border-x border-t border-dashed border-white/20 bg-[#050505] px-6 pb-8 pt-16 text-center text-white">
       <style>{`
         .foot-link { transition: color 0.2s ease, border-color 0.2s ease; }
-        .foot-link:hover { color: #4da2ff; border-color: #4da2ff !important; }
+        .foot-link:hover { color: #FFB224; border-color: #FFB224 !important; }
       `}</style>
       <div className="mx-auto max-w-3xl">
         <p className="mb-2 text-3xl font-normal leading-[1.2] tracking-tight md:text-4xl">
@@ -45,7 +45,7 @@ export default function Footer() {
               href={l.href}
               target={l.href.startsWith("http") ? "_blank" : undefined}
               rel={l.href.startsWith("http") ? "noopener noreferrer" : undefined}
-              className="foot-link inline-flex min-h-[44px] items-center border-b-2 border-[#4da2ff]/60 pb-0.5 text-[15px] font-semibold text-white no-underline"
+              className="foot-link inline-flex min-h-[44px] items-center border-b-2 border-[#FFB224]/60 pb-0.5 text-[15px] font-semibold text-white no-underline"
             >
               {l.label} ↗
             </a>

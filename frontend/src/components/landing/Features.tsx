@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
 import { useHidden, EASE_OUT } from "./reveal";
 import { CarrySection, SectionH2 } from "./carry/Section";
 
-const BLUE = "#4da2ff";
+const AMBER = "#FFB224";
 
 type Feature = {
   label: string;
@@ -39,7 +39,7 @@ function Glyph({ children }: { children: ReactNode }) {
   );
 }
 
-const A = BLUE;
+const A = AMBER;
 
 const FEATURES: Feature[] = [
   {
@@ -159,13 +159,13 @@ function Module({ f, index }: { f: Feature; index: number }) {
       className="border border-dashed border-white/20 bg-white/[0.02] p-6"
     >
       {/* 1 — label */}
-      <p className="mb-3.5 text-xs font-bold tracking-[0.2em] text-[#4da2ff]">
+      <p className="mb-3.5 text-xs font-bold tracking-[0.2em] text-[#FFB224]">
         {f.label}
       </p>
       {/* 2 — contents list */}
       <ul className="mb-2.5 list-none p-0 text-[15px] font-light leading-[1.7] text-gray-400">
         {f.contents.map((c) => (
-          <li key={c} className="pl-0 before:mr-2 before:text-[#4da2ff] before:content-['–']">{c}</li>
+          <li key={c} className="pl-0 before:mr-2 before:text-[#FFB224] before:content-['–']">{c}</li>
         ))}
       </ul>
       {/* 3 — asterisk fine print */}

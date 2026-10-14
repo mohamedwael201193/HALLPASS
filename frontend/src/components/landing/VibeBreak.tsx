@@ -8,7 +8,7 @@
 import { motion } from "framer-motion";
 import { useHidden, EASE_OUT } from "./reveal";
 
-const BLUE = "#4da2ff";
+const AMBER = "#FFB224";
 
 export default function VibeBreak() {
   const hidden = useHidden(48);
@@ -39,9 +39,9 @@ export default function VibeBreak() {
         viewBox="0 0 360 180"
         className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80vw] -translate-x-1/2 -translate-y-1/2 opacity-50"
       >
-        <circle className="vibe-breathe" cx="180" cy="90" r="52" fill="none" stroke={BLUE} strokeWidth="1.5" />
-        <circle cx="180" cy="90" r="30" fill="none" stroke={BLUE} strokeWidth="1" opacity="0.5" />
-        <circle cx="180" cy="90" r="5" fill={BLUE} opacity="0.8" />
+        <circle className="vibe-breathe" cx="180" cy="90" r="52" fill="none" stroke={AMBER} strokeWidth="1.5" />
+        <circle cx="180" cy="90" r="30" fill="none" stroke={AMBER} strokeWidth="1" opacity="0.5" />
+        <circle cx="180" cy="90" r="5" fill={AMBER} opacity="0.8" />
       </svg>
 
       <motion.h2

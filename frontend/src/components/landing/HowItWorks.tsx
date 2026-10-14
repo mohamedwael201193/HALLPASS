@@ -11,12 +11,12 @@ import { CarrySection, SectionH2 } from "./carry/Section";
  * 2.5px stroke language, recolored to the blue family. All copy byte-identical.
  */
 
-const BLUE = "#4da2ff";
+const AMBER = "#FFB224";
 const DENY = "#E0655F";
 
 function IconSlip() {
   return (
-    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Hall-pass slip being installed">
+    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Hall-pass slip being installed">
       <rect x="12" y="6" width="24" height="32" rx="3" />
       <path d="M18 14 h12 M18 20 h12 M18 26 h7" />
       <path d="M30 30 l6 6 M36 30 l-6 6" stroke="#FFFFFF" />
@@ -26,7 +26,7 @@ function IconSlip() {
 
 function IconSliders() {
   return (
-    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Sliders for spending bounds">
+    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Sliders for spending bounds">
       <path d="M8 16 h32 M8 24 h32 M8 32 h32" stroke="#FFFFFF" opacity="0.5" />
       <circle cx="30" cy="16" r="5" fill="#050505" />
       <circle cx="18" cy="24" r="5" fill="#050505" />
@@ -37,7 +37,7 @@ function IconSliders() {
 
 function IconKey() {
   return (
-    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Session key turning">
+    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinecap="round" role="img" aria-label="Session key turning">
       <circle cx="17" cy="17" r="9" />
       <path d="M24 24 L40 40" />
       <path d="M33 33 l5 0 M37 37 l4 0" />
@@ -49,7 +49,7 @@ function IconKey() {
 function IconShieldX() {
   return (
     <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Shield blocking an over-cap spend">
-      <path d="M24 4 L40 10 v12 c0 10 -7 17 -16 22 C15 39 8 32 8 22 V10 Z" stroke={BLUE} strokeWidth="2.5" />
+      <path d="M24 4 L40 10 v12 c0 10 -7 17 -16 22 C15 39 8 32 8 22 V10 Z" stroke={AMBER} strokeWidth="2.5" />
       <path d="M18 18 l12 12 M30 18 l-12 12" stroke={DENY} strokeWidth="2.5" />
     </svg>
   );
@@ -57,7 +57,7 @@ function IconShieldX() {
 
 function IconRevoke() {
   return (
-    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Hall-pass slip torn in two">
+    <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Hall-pass slip torn in two">
       <path d="M10 8 h14 l-4 8 4 8 -4 8 4 8 H10 Z" />
       <path d="M38 8 H26 l4 8 -4 8 4 8 -4 8 h12 Z" opacity="0.45" />
       <path d="M24 8 l-3 6 M24 20 l3 6 M24 32 l-3 6" stroke={DENY} />
@@ -132,7 +132,7 @@ export default function HowItWorks() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-60px" }}
         transition={{ duration: 0.7, ease: EASE_OUT }}
-        className="mx-auto mt-14 max-w-3xl border border-dashed border-[#4da2ff]/40 bg-white/[0.02] p-8 text-center md:mt-20 md:p-10"
+        className="mx-auto mt-14 max-w-3xl border border-dashed border-[#FFB224]/40 bg-white/[0.02] p-8 text-center md:mt-20 md:p-10"
       >
         <p className="text-xl font-normal leading-tight text-white md:text-3xl">
           Every step above is real — proven on Arc mainnet, not a mockup.
@@ -156,19 +156,19 @@ function StepCard({ step, index }: { step: (typeof STEPS)[number]; index: number
       transition={{ duration: 0.7, ease: EASE_OUT, delay: (index % 3) * 0.08 }}
       className={`border p-8 ${
         "blue" in step && step.blue
-          ? "border-[#4da2ff]/40 bg-white/[0.03]"
+          ? "border-[#FFB224]/40 bg-white/[0.03]"
           : "border-dashed border-white/20 bg-white/[0.02]"
       }`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex h-20 w-20 items-center justify-center bg-[#050505] ring-1 ring-[#4da2ff]/20">
+        <div className="flex h-20 w-20 items-center justify-center bg-[#050505] ring-1 ring-[#FFB224]/20">
           {step.icon}
         </div>
-        <span className="font-geist text-5xl tracking-tighter text-[#4da2ff]/20 md:text-6xl">
+        <span className="font-geist text-5xl tracking-tighter text-[#FFB224]/20 md:text-6xl">
           {step.n}
         </span>
       </div>
-      <p className="mt-6 text-xs font-bold uppercase tracking-[0.25em] text-[#4da2ff]">
+      <p className="mt-6 text-xs font-bold uppercase tracking-[0.25em] text-[#FFB224]">
         {step.tag}
       </p>
       <h3 className="mt-2 text-2xl font-normal text-white md:text-3xl">

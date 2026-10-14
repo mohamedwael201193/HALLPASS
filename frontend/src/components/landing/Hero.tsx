@@ -56,10 +56,11 @@ const rise = (delay: number) => ({
 });
 
 /**
- * Hero — carry-exact (2026-10-15, usecarry.xyz visual spec).
+ * Hero — carry grammar, amber identity (2026-10-15). De-cloned from the blue carry-exact pass per founder order.
  *
- * Background: DotGrid (dots tinted #4da2ff at low opacity, radial edge fade)
- * + Beams (color '#4da2ff', restrained speed) as the top-center light beam.
+ * Background: DotGrid (dots tinted #FFB224 at low opacity, radial edge fade)
+ * + Beams (color '#FFB224', narrower/softer than the carry pass) as the
+ * top-center light beam.
  * Both are dependency-free WebGL; paused={true} under reduced motion.
  *
  * Typography: Satoshi 400 H1 (text-5xl → md:text-6xl → lg:text-[4.5rem],
@@ -77,14 +78,14 @@ export default function Hero() {
         id="top"
         className="relative mx-auto w-full max-w-7xl overflow-hidden border-x border-dashed border-white/20 px-6 pb-24 pt-16 text-center md:pb-32 md:pt-32"
       >
-        {/* living background: blue dot field + top-center light beam */}
+        {/* living background: amber dot field + top-center light beam */}
         <div aria-hidden className="pointer-events-none absolute inset-0">
           <DotGrid
             className="absolute inset-0"
             dotSize={4}
             gap={20}
-            baseColor="#16233f"
-            activeColor="#4da2ff"
+            baseColor="#2a1f0a"
+            activeColor="#FFB224"
             fade={0.9}
             opacity={0.55}
             mouseInteraction={false}
@@ -94,13 +95,13 @@ export default function Hero() {
           />
           <div className="carry-beam-mask absolute inset-x-0 top-0 h-[560px]">
             <Beams
-              color="#4da2ff"
-              beamWidth={120}
+              color="#FFB224"
+              beamWidth={104}
               speed={0.4}
-              brightness={1.2}
+              brightness={1.1}
               glow={0.5}
               fillLight={0.25}
-              opacity={0.7}
+              opacity={0.62}
               fade={0.5}
               mouseInteraction={false}
               intro={!reduceMotion}
@@ -128,7 +129,7 @@ export default function Hero() {
             className="mb-6 text-5xl font-normal leading-[1.05] tracking-tight text-white md:text-6xl lg:text-[4.5rem]"
           >
             Give your agent a{" "}<br className="hidden md:block" />
-            <span className="text-[#4da2ff]">hall&nbsp;pass,</span> not your
+            <span className="text-[#FFB224]">hall&nbsp;pass,</span> not your
             keys.
           </motion.h1>
 

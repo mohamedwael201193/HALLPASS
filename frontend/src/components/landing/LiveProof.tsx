@@ -133,7 +133,7 @@ export default function LiveProof() {
     <CarrySection id="live-proof" number="04" label="Live proof">
       <style>{`
         .proof-card { transition: border-color 0.25s ease, transform 0.25s ease; }
-        .proof-card:hover { border-color: rgba(77,162,255,0.5); transform: translateY(-2px); }
+        .proof-card:hover { border-color: rgba(255,178,36,0.5); transform: translateY(-2px); }
         @media (prefers-reduced-motion: reduce) {
           .proof-card { transition: none; }
           .proof-card:hover { transform: none; }
@@ -158,7 +158,7 @@ export default function LiveProof() {
         <div className="mt-14">
           {groups.map((g) => (
             <div key={g} className="mb-10">
-              <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-[#4da2ff]">
+              <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-[#FFB224]">
                 {g}
               </h3>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -181,7 +181,7 @@ export default function LiveProof() {
                       </p>
                       <code
                         title={p.value}
-                        className="font-geist mb-3 inline-block break-all border border-[#4da2ff]/25 bg-[#4da2ff]/[0.08] px-2.5 py-1.5 text-[13px] text-[#4da2ff]"
+                        className="font-geist mb-3 inline-block break-all border border-[#FFB224]/25 bg-[#FFB224]/[0.08] px-2.5 py-1.5 text-[13px] text-[#FFB224]"
                       >
                         {short(p.value)}
                       </code>
@@ -191,7 +191,7 @@ export default function LiveProof() {
                         </span>
                         {p.proves}
                       </p>
-                      <p className="mb-0 mt-3 text-[13px] font-semibold text-[#4da2ff]">
+                      <p className="mb-0 mt-3 text-[13px] font-semibold text-[#FFB224]">
                         View on Arc explorer ↗
                       </p>
                     </a>

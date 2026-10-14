@@ -42,7 +42,7 @@ export default function Faq() {
     <CarrySection id="faq" number="07" label="FAQ">
       <style>{`
         .faq-item { transition: border-color 0.25s ease; }
-        .faq-item:hover { border-color: rgba(77,162,255,0.45); }
+        .faq-item:hover { border-color: rgba(255,178,36,0.45); }
         .faq-item summary { position: relative; padding-right: 36px; }
         .faq-item summary::-webkit-details-marker { display: none; }
         .faq-item summary::marker { content: ""; }
@@ -50,7 +50,7 @@ export default function Faq() {
           content: "+";
           position: absolute; right: 6px; top: 50%;
           transform: translateY(-50%);
-          color: #4da2ff; font-size: 22px; font-weight: 700; line-height: 1;
+          color: #FFB224; font-size: 22px; font-weight: 700; line-height: 1;
         }
         .faq-item[open] summary::after { content: "\\2013"; }
         @media (prefers-reduced-motion: reduce) {

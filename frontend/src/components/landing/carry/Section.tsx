@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * Shared carry-exact section grammar (usecarry.xyz visual spec, our content).
  * Section shell: max-w-7xl border-x border-t border-dashed border-white/20 bg-[#050505].
- * Label row: mono number + hairline divider + blue uppercase label.
+ * Label row: mono number + hairline divider + amber uppercase label.
  */
 
 export function CarrySection({
@@ -29,8 +29,8 @@ export function CarrySection({
           <span className="font-geist text-sm tracking-tighter text-white/40">
             {number}
           </span>
-          <span aria-hidden className="h-4 w-px bg-white/20" />
-          <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#4da2ff]">
+          <span aria-hidden className="h-4 w-px bg-[#FFB224]/50" />
+          <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#FFB224]">
             {label}
           </span>
         </div>
@@ -75,15 +75,15 @@ export function GradientCta({
   return (
     <a
       href={href}
-      className={`group relative inline-flex min-h-[44px] items-center justify-center rounded-none bg-gradient-to-r from-[#1e3a8a] via-[#3b82f6] to-[#38bdf8] p-px shadow-[0_0_20px_-5px_rgba(77,162,255,0.5)] transition-all duration-200 hover:scale-[1.03] hover:shadow-[0_0_35px_-5px_rgba(77,162,255,0.85)] active:scale-[0.97]`}
+      className={`group relative inline-flex min-h-[44px] items-center justify-center rounded-none bg-gradient-to-r from-[#78350f] via-[#f59e0b] to-[#fbbf24] p-px shadow-[0_0_20px_-5px_rgba(255,178,36,0.5)] transition-all duration-200 hover:scale-[1.03] hover:shadow-[0_0_35px_-5px_rgba(255,178,36,0.85)] active:scale-[0.97]`}
     >
       {/* side glow via radial-gradient — no blur() filter */}
       <span
         aria-hidden
-        className="pointer-events-none absolute -inset-10 bg-[radial-gradient(closest-side,rgba(77,162,255,0.22),transparent)]"
+        className="pointer-events-none absolute -inset-10 bg-[radial-gradient(closest-side,rgba(255,178,36,0.22),transparent)]"
       />
       <span
-        className={`block size-full bg-gradient-to-b from-[#172554] to-black ${
+        className={`block size-full bg-gradient-to-b from-[#451a03] to-black ${
           small
             ? "px-7 py-3 text-[11px] tracking-[0.15em]"
             : "px-10 py-4 text-sm tracking-[0.2em]"

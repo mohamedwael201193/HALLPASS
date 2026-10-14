@@ -10,7 +10,7 @@ import { CarrySection, SectionH2 } from "./carry/Section";
  * dark cards, blue accents. All copy byte-identical; only styling changed.
  */
 
-const BLUE = "#4da2ff";
+const AMBER = "#FFB224";
 const DENY = "#E0655F";
 
 const PANELS = [
@@ -39,7 +39,7 @@ function KeyLeashArt({ variant }: { variant: "keys" | "leash" }) {
         aria-label="A house key floating above an open vault door"
         fill="none"
       >
-        <ellipse cx="160" cy="178" rx="110" ry="10" fill={BLUE} opacity="0.08" />
+        <ellipse cx="160" cy="178" rx="110" ry="10" fill={AMBER} opacity="0.08" />
         {/* vault door */}
         <rect x="52" y="60" width="216" height="120" rx="18" stroke="#3A4356" strokeWidth="2" />
         <circle cx="244" cy="120" r="7" stroke="#3A4356" strokeWidth="2" />
@@ -53,10 +53,10 @@ function KeyLeashArt({ variant }: { variant: "keys" | "leash" }) {
           <line x1="160" y1="152" x2="172" y2="152" stroke={DENY} strokeWidth="5" strokeLinecap="round" />
         </g>
         {/* falling coins — everything leaves at once */}
-        <circle cx="110" cy="40" r="5" fill={BLUE} opacity="0.9" />
-        <circle cx="205" cy="30" r="4" fill={BLUE} opacity="0.6" />
-        <circle cx="246" cy="52" r="3.5" fill={BLUE} opacity="0.4" />
-        <path d="M96 44 q8 10 2 22 M200 34 q-6 12 -1 24 M242 56 q6 8 2 18" stroke={BLUE} strokeWidth="1.5" opacity="0.7" />
+        <circle cx="110" cy="40" r="5" fill={AMBER} opacity="0.9" />
+        <circle cx="205" cy="30" r="4" fill={AMBER} opacity="0.6" />
+        <circle cx="246" cy="52" r="3.5" fill={AMBER} opacity="0.4" />
+        <path d="M96 44 q8 10 2 22 M200 34 q-6 12 -1 24 M242 56 q6 8 2 18" stroke={AMBER} strokeWidth="1.5" opacity="0.7" />
       </svg>
     );
   }
@@ -69,7 +69,7 @@ function KeyLeashArt({ variant }: { variant: "keys" | "leash" }) {
       aria-label="A key on a very short leash tied to a post"
       fill="none"
     >
-      <ellipse cx="160" cy="178" rx="110" ry="10" fill={BLUE} opacity="0.08" />
+      <ellipse cx="160" cy="178" rx="110" ry="10" fill={AMBER} opacity="0.08" />
       {/* post */}
       <rect x="236" y="52" width="14" height="126" rx="7" stroke="#5A6070" strokeWidth="2" />
       {/* tight leash */}
@@ -80,8 +80,8 @@ function KeyLeashArt({ variant }: { variant: "keys" | "leash" }) {
         <line x1="160" y1="130" x2="160" y2="182" stroke="#8A93A6" strokeWidth="5" strokeLinecap="round" />
         <line x1="160" y1="150" x2="176" y2="150" stroke="#8A93A6" strokeWidth="5" strokeLinecap="round" />
       </g>
-      <circle cx="66" cy="120" r="10" stroke={BLUE} strokeWidth="2" opacity="0.9" />
-      <text x="66" y="125" textAnchor="middle" fill={BLUE} fontSize="12" fontWeight="bold">¢</text>
+      <circle cx="66" cy="120" r="10" stroke={AMBER} strokeWidth="2" opacity="0.9" />
+      <text x="66" y="125" textAnchor="middle" fill={AMBER} fontSize="12" fontWeight="bold">¢</text>
       <path d="M132 108 L96 112 M132 132 L98 128" stroke="#8A93A6" strokeWidth="1.5" strokeDasharray="4 4" />
       <text x="66" y="150" textAnchor="middle" fill="#8A93A6" fontSize="11">"not today"</text>
     </svg>
@@ -136,8 +136,8 @@ export default function Problem() {
           transition={{ duration: 0.7, ease: EASE_OUT }}
           className="mt-12 flex flex-col gap-6 border border-dashed border-white/20 bg-white/[0.02] p-8 md:mt-16 md:flex-row md:items-center md:gap-10 md:p-10"
         >
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center ring-1 ring-[#4da2ff]/40 md:h-16 md:w-16">
-            <svg viewBox="0 0 32 32" className="h-8 w-8 md:h-9 md:w-9" fill="none" stroke={BLUE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center ring-1 ring-[#FFB224]/40 md:h-16 md:w-16">
+            <svg viewBox="0 0 32 32" className="h-8 w-8 md:h-9 md:w-9" fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M7 24 L24 7" />
               <path d="M16 7 h8 v8" />
             </svg>

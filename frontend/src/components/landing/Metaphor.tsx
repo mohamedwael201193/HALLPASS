@@ -13,14 +13,14 @@ import { CarrySection } from "./carry/Section";
  * All copy byte-identical; only styling changed.
  */
 
-const STROKE = "#4da2ff";
+const STROKE = "#FFB224";
 
 function PinIcon() {
   return (
     <svg viewBox="0 0 48 48" className="h-16 w-16" fill="none" stroke={STROKE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Map pin marking the one approved destination">
       <path d="M24 42 C24 42 10 26 10 17 a14 14 0 0 1 28 0 C38 26 24 42 24 42 Z" />
       <circle cx="24" cy="17" r="5.5" />
-      <circle cx="24" cy="17" r="10.5" stroke="#4da2ff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
+      <circle cx="24" cy="17" r="10.5" stroke="#FFB224" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
     </svg>
   );
 }
@@ -120,7 +120,7 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
       className="relative border border-dashed border-white/20 bg-white/[0.02] p-7 md:p-8"
     >
       {/* punched hole — the slip hangs on the classroom peg */}
-      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border border-dashed border-[#4da2ff]/60 bg-[#050505]" />
+      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border border-dashed border-[#FFB224]/60 bg-[#050505]" />
 
       {/* 1 · label */}
       <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/50">
@@ -178,9 +178,9 @@ export default function Metaphor() {
       >
         <p className="text-3xl font-normal leading-[1.12] tracking-tight text-white md:text-5xl">
           &ldquo;You may leave the room —{" "}
-          <span className="text-[#4da2ff]">but only to the bathroom,</span>{" "}
+          <span className="text-[#FFB224]">but only to the bathroom,</span>{" "}
           and only until the{" "}
-          <span className="text-[#4da2ff]">bell rings</span>.&rdquo;
+          <span className="text-[#FFB224]">bell rings</span>.&rdquo;
         </p>
         <footer className="mt-6 text-base font-light leading-[1.6] text-gray-400">
           Every schoolkid knows this deal. Your AI agent is about to learn it too.
@@ -203,7 +203,7 @@ export default function Metaphor() {
         That slip of paper runs <span className="font-normal text-white">on-chain</span>,
         enforced by your own smart account — not by a promise, not by a server
         that could be talked out of it. The account checks the pass on every
-        spend, and <span className="font-normal text-[#4da2ff]">amber means go</span>.
+        spend, and <span className="font-normal text-[#FFB224]">amber means go</span>.
       </motion.p>
     </CarrySection>
   );

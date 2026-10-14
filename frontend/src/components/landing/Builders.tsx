@@ -31,7 +31,7 @@ export default function Builders() {
     <CarrySection id="builders" number="06" label="For builders">
       <style>{`
         .builder-btn { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
-        .builder-btn:hover { background: rgba(77,162,255,0.12) !important; border-color: #4da2ff !important; color: #4da2ff !important; }
+        .builder-btn:hover { background: rgba(255,178,36,0.12) !important; border-color: #FFB224 !important; color: #FFB224 !important; }
       `}</style>
       <motion.div
         initial={hidden}
@@ -53,7 +53,7 @@ export default function Builders() {
         <div className="flex flex-wrap items-center gap-3">
           <a
             href="#live-proof"
-            className="builder-btn inline-flex min-h-[44px] items-center border-2 border-[#4da2ff]/60 bg-transparent px-6 py-3 font-bold text-[#4da2ff] no-underline"
+            className="builder-btn inline-flex min-h-[44px] items-center border-2 border-[#FFB224]/60 bg-transparent px-6 py-3 font-bold text-[#FFB224] no-underline"
           >
             See the proof on-chain
           </a>

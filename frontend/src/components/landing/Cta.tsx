@@ -14,7 +14,7 @@ export default function Cta() {
     <section className="relative mx-auto w-full max-w-7xl border-x border-t border-dashed border-white/20 bg-[#050505] px-6 py-20 text-center md:py-28">
       <style>{`
         .cta-ghost { transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease; }
-        .cta-ghost:hover { border-color: #4da2ff !important; background: rgba(77,162,255,0.08) !important; color: #4da2ff !important; }
+        .cta-ghost:hover { border-color: #FFB224 !important; background: rgba(255,178,36,0.08) !important; color: #FFB224 !important; }
       `}</style>
       <motion.div
         initial={hidden}
