@@ -1,0 +1,40 @@
+# node_modules / deps
+node_modules/
+
+# env files (never commit real values)
+.env
+.env.local
+.env.*.local
+
+# build outputs
+dist/
+out/
+cache/
+build/
+.next/
+.vite/
+
+# databases
+*.sqlite
+*.db
+db.sqlite
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# forge / foundry
+contracts/out/
+contracts/cache/
+
+# receipts / test artifacts with secrets
+*.key
+*.pem

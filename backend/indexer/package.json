@@ -1,0 +1,1 @@
+{"dependencies":{"better-sqlite3":"^13.0.0","ethers":"^6.13.0"},"description":"Read-only event indexer for the HALLPASS ERC-6900 v0.7 policy plugin on Arc mainnet (chain 5042)","engines":{"node":">=20"},"main":"index.js","name":"hallpass-indexer","private":true,"scripts":{"check":"node --check index.js && echo OK","start":"node index.js"},"type":"commonjs","version":"1.0.0"}

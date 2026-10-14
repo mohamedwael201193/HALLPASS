@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* HALLPASS brand tokens (prompt §4) — also mirrored in tailwind.config.js */
+:root {
+  --hp-ink: #121110; /* page / hero / section backgrounds */
+  --hp-amber: #ffb224; /* THE permission glow — allowed moments, CTAs, highlights */
+  --hp-cream: #faf6ee; /* light contrast sections, cards on dark */
+  --hp-text: #fff9ef; /* headlines + body on dark */
+  --hp-muted-red: #b0523c; /* blocked / denied — sparingly, never the hero color */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--hp-ink);
+  color: var(--hp-text);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--hp-amber);
+  color: var(--hp-ink);
+}
+
+/* Slim dark scrollbar — amber thumb on hover */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--hp-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: #2b2926;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hp-amber);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2b2926 var(--hp-ink);
+}

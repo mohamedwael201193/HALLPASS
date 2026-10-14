@@ -1,0 +1,394 @@
+openapi: 3.0.3
+info:
+  title: HALLPASS Backend API
+  version: 0.1.0
+  description: |
+    Serves the HALLPASS indexer's cache to the dashboard: accounts, installed
+    plugins, policies, activity, stats, and config — plus the userOp relay.
+    The indexer is cache, the chain is truth: every row carries chain provenance
+    (blockNumber, txHash, logIndex) and the dashboard re-verifies live state
+    from chain. Nothing here is implemented yet — all endpoints are planned.
+servers:
+  - url: https://hallpass-api.example.com
+    description: Planned Render web service (not deployed)
+  - url: http://localhost:8080
+    description: Local dev (not implemented)
+
+paths:
+  /health:
+    get:
+      x-status: planned
+      summary: Service health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                indexer: { syncedBlock: 41200120, lagBlocks: 3 }
+                relay: { online: true }
+                chainId: 5042
+
+  /api/config:
+    get:
+      x-status: planned
+      summary: Chain and contract config for the frontend
+      responses:
+        '200':
+          description: Config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+              example:
+                chainId: 5042
+                chainName: Arc
+                rpcUrl: https://rpc.mainnet.arc.io
+                entryPoint: '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
+                accountImpl: '0xA70F1296869DA9D7CB69578123F21888E6dB2B62'
+                usdc: '0x3600000000000000000000000000000000000000'
+                plugins:
+                  - name: hallpass-full
+                    address: null
+                    manifestHash: null
+                    sourcify: null
+                erc1271Magic: '0x1626ba7e'
+
+  /api/accounts/{address}:
+    get:
+      x-status: planned
+      summary: Account summary (balances + installed plugin count; from indexer cache)
+      parameters:
+        - $ref: '#/components/parameters/AccountAddress'
+      responses:
+        '200':
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummary'
+              example:
+                address: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+                usdcBalance: '0.050000'
+                nativeBalanceWei: '50000000000000000'
+                installedPluginCount: 1
+                lastIndexedBlock: 41200120
+        '404':
+          description: Account never seen by the indexer
+
+  /api/accounts/{address}/plugins:
+    get:
+      x-status: planned
+      summary: Installed plugins with manifest verification state
+      parameters:
+        - $ref: '#/components/parameters/AccountAddress'
+      responses:
+        '200':
+          description: Installed plugins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address: { type: string }
+                  plugins:
+                    type: array
+                    items: { $ref: '#/components/schemas/InstalledPlugin' }
+              example:
+                address: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+                plugins:
+                  - plugin: '0x7C912e73f9b8B60e4c68d52DeC5524e17ABDd'
+                    name: hallpass-full
+                    manifestHash: '0x9f2c…'
+                    manifestVerified: true
+                    sourcifyMatch: exact_match
+                    installedBlock: 41199800
+                    installedTx: '0x2093…11c01'
+
+  /api/accounts/{address}/policies:
+    get:
+      x-status: planned
+      summary: Session policies installed on the account (from indexer cache; chain is truth)
+      parameters:
+        - $ref: '#/components/parameters/AccountAddress'
+      responses:
+        '200':
+          description: Policies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address: { type: string }
+                  policies:
+                    type: array
+                    items: { $ref: '#/components/schemas/Policy' }
+              example:
+                address: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+                policies:
+                  - sessionKey: '0x4a1b…'
+                    owner: '0x91cd…'
+                    perTxCapWei: '10000000000000000'
+                    perTxCapUsdc: '0.01'
+                    windowCapWei: '20000000000000000'
+                    windowCapUsdc: '0.02'
+                    windowSecs: 3600
+                    windowStart: 1760452800
+                    windowSpentWei: '5000000000000000'
+                    expiry: 1760460000
+                    allowlist: ['0x3600000000000000000000000000000000000000']
+                    revoked: false
+                    policyHash: '0xab12…'
+                    installedTx: '0x2093…11c01'
+
+  /api/accounts/{address}/activity:
+    get:
+      x-status: planned
+      summary: Activity feed — allowed spends (from SpendAuthorized events) and blocked attempts
+      parameters:
+        - $ref: '#/components/parameters/AccountAddress'
+        - name: filter
+          in: query
+          schema: { type: string, enum: [all, allowed, blocked] }
+        - name: sessionKey
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 500 }
+        - name: before
+          in: query
+          description: Pagination cursor (blockNumber:logIndex)
+          schema: { type: string }
+      responses:
+        '200':
+          description: Activity rows, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address: { type: string }
+                  rows:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActivityRow' }
+              example:
+                address: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+                rows:
+                  - kind: allowed
+                    source: on_chain_event
+                    sessionKey: '0x4a1b…'
+                    to: '0x77aa…'
+                    amountWei: '5000000000000000'
+                    amountUsdc: '0.005'
+                    windowUsedWei: '5000000000000000'
+                    policyHash: '0xab12…'
+                    txHash: '0x113c…467'
+                    blockNumber: 41200010
+                    logIndex: 3
+                  - kind: blocked
+                    source: observed_revert
+                    reason: PerTxCapExceeded
+                    attemptedWei: '50000000000000000'
+                    attemptedUsdc: '0.05'
+                    capUsdc: '0.01'
+                    plainLanguage: 'Blocked: 0.05 USDC exceeds your $0.01 per-payment cap. Nothing was spent.'
+                    txHash: '0x1c25…49'
+                    blockNumber: 41200030
+
+  /api/accounts/{address}/stats:
+    get:
+      x-status: planned
+      summary: Per-session rollups computed by the indexer
+      parameters:
+        - $ref: '#/components/parameters/AccountAddress'
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+              example:
+                address: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+                sessions:
+                  - sessionKey: '0x4a1b…'
+                    status: ACTIVE
+                    allowedCount: 2
+                    blockedCount: 1
+                    totalSpentWei: '11000000000000000'
+                    totalSpentUsdc: '0.011'
+                    windowUsedWei: '6000000000000000'
+                    windowUsedUsdc: '0.006'
+                lastIndexedBlock: 41200120
+
+  /api/relay/userop:
+    post:
+      x-status: planned
+      summary: Self-relay a signed PackedUserOperation via EntryPoint.handleOps
+      description: |
+        The relay forwards the signed userOp to EntryPoint.handleOps — it never
+        signs, never modifies calldata. Requires the account's EntryPoint deposit
+        to cover the prefund. Honest degradation: if the relay is down the
+        dashboard offers the direct-call path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelayRequest'
+            example:
+              sender: '0x2829f88DB9D8f86E57E9606b56cAC1039b6Bf89a'
+              userOp: { nonce: '0', callData: '0xf85730f4…', signature: '0x…' }
+      responses:
+        '202':
+          description: Accepted for submission
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userOpHash: { type: string }
+                  status: { type: string, enum: [submitted] }
+        '400':
+          description: Malformed userOp
+        '503':
+          description: Relay unavailable — use the direct-call path
+
+components:
+  parameters:
+    AccountAddress:
+      name: address
+      in: path
+      required: true
+      schema: { type: string, pattern: '^0x[0-9a-fA-F]{40}$' }
+
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        indexer:
+          type: object
+          properties:
+            syncedBlock: { type: integer }
+            lagBlocks: { type: integer }
+        relay:
+          type: object
+          properties:
+            online: { type: boolean }
+        chainId: { type: integer, example: 5042 }
+
+    Config:
+      type: object
+      properties:
+        chainId: { type: integer, example: 5042 }
+        chainName: { type: string }
+        rpcUrl: { type: string }
+        entryPoint: { type: string }
+        accountImpl: { type: string }
+        usdc: { type: string }
+        plugins:
+          type: array
+          items:
+            type: object
+            nullable: true
+            properties:
+              name: { type: string }
+              address: { type: string, nullable: true }
+              manifestHash: { type: string, nullable: true }
+              sourcify: { type: string, nullable: true }
+        erc1271Magic: { type: string, example: '0x1626ba7e' }
+
+    AccountSummary:
+      type: object
+      properties:
+        address: { type: string }
+        usdcBalance: { type: string, description: ERC-20 USDC, 6 decimals, display form }
+        nativeBalanceWei: { type: string, description: native gas token, 18 decimals }
+        installedPluginCount: { type: integer }
+        lastIndexedBlock: { type: integer }
+
+    InstalledPlugin:
+      type: object
+      properties:
+        plugin: { type: string }
+        name: { type: string, nullable: true }
+        manifestHash: { type: string }
+        manifestVerified: { type: boolean, description: on-chain pluginManifest() hash matches }
+        sourcifyMatch: { type: string, enum: [exact_match, partial_match, none], nullable: true }
+        installedBlock: { type: integer }
+        installedTx: { type: string }
+
+    Policy:
+      type: object
+      properties:
+        sessionKey: { type: string }
+        owner: { type: string }
+        perTxCapWei: { type: string }
+        perTxCapUsdc: { type: string }
+        windowCapWei: { type: string }
+        windowCapUsdc: { type: string }
+        windowSecs: { type: integer }
+        windowStart: { type: integer }
+        windowSpentWei: { type: string }
+        expiry: { type: integer, description: unix timestamp }
+        allowlist: { type: array, items: { type: string }, description: empty = open, caps still apply }
+        revoked: { type: boolean }
+        policyHash: { type: string, description: committed on-chain at install }
+        installedTx: { type: string }
+
+    ActivityRow:
+      type: object
+      required: [kind, source, txHash, blockNumber]
+      properties:
+        kind: { type: string, enum: [allowed, blocked] }
+        source:
+          type: string
+          enum: [on_chain_event, observed_revert]
+          description: Blocked rows from reverts are labeled honestly by source
+        sessionKey: { type: string }
+        to: { type: string }
+        amountWei: { type: string }
+        amountUsdc: { type: string }
+        windowUsedWei: { type: string }
+        policyHash: { type: string }
+        reason: { type: string, description: e.g. PerTxCapExceeded, WindowCapExceeded, NotAllowlisted, SessionExpired, SessionRevoked }
+        attemptedWei: { type: string }
+        attemptedUsdc: { type: string }
+        capUsdc: { type: string }
+        plainLanguage: { type: string }
+        txHash: { type: string }
+        blockNumber: { type: integer }
+        logIndex: { type: integer, nullable: true }
+
+    Stats:
+      type: object
+      properties:
+        address: { type: string }
+        sessions:
+          type: array
+          items:
+            type: object
+            properties:
+              sessionKey: { type: string }
+              status: { type: string, enum: [ACTIVE, EXPIRED, REVOKED] }
+              allowedCount: { type: integer }
+              blockedCount: { type: integer }
+              totalSpentWei: { type: string }
+              totalSpentUsdc: { type: string }
+              windowUsedWei: { type: string }
+              windowUsedUsdc: { type: string }
+        lastIndexedBlock: { type: integer }
+
+    RelayRequest:
+      type: object
+      required: [sender, userOp]
+      properties:
+        sender: { type: string, description: the MSCA address }
+        userOp:
+          type: object
+          description: ERC-4337 v0.7 PackedUserOperation, fully signed by the owner key
