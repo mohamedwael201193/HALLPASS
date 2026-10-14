@@ -36,7 +36,7 @@ export default function Nav() {
 
         <a
           href="/app"
-          className="rounded-full bg-[#FFB224] px-6 py-2.5 text-sm font-bold text-[#121110] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          className="rounded-full bg-[#FFB224] px-6 py-3 text-sm font-bold text-[#121110] transition-colors hover:bg-[#e6a41f] active:bg-[#d6951a]"
         >
           Launch app
         </a>

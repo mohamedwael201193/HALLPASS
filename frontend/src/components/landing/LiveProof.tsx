@@ -143,9 +143,17 @@ export default function LiveProof() {
       style={{
         background: TOKENS.bg,
         color: TOKENS.textDark,
-        padding: "96px 24px",
+        padding: "clamp(96px, 10vw, 128px) 24px",
       }}
     >
+      <style>{`
+        .proof-card { transition: border-color 0.25s ease, transform 0.25s ease; }
+        .proof-card:hover { border-color: rgba(255,178,36,0.5); transform: translateY(-2px); }
+        @media (prefers-reduced-motion: reduce) {
+          .proof-card { transition: none; }
+          .proof-card:hover { transform: none; }
+        }
+      `}</style>
       <motion.div
         initial={hidden}
         whileInView={{ opacity: 1, y: 0 }}
@@ -167,7 +175,7 @@ export default function LiveProof() {
         </p>
         <h2
           style={{
-            fontSize: "clamp(34px, 5vw, 56px)",
+            fontSize: "clamp(30px, 4.5vw, 48px)",
             lineHeight: 1.05,
             letterSpacing: "-0.02em",
             margin: "0 0 12px",
@@ -216,6 +224,7 @@ export default function LiveProof() {
                   href={linkFor(p)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="proof-card"
                   style={{
                     display: "block",
                     background: TOKENS.card,

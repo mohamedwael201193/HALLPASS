@@ -37,27 +37,29 @@ export default function Footer() {
       style={{
         background: TOKENS.cream,
         color: TOKENS.ink,
-        padding: "72px 24px 36px",
+        padding: "64px 24px 32px",
         textAlign: "center",
       }}
     >
+      <style>{`
+        .foot-link { transition: color 0.2s ease, border-color 0.2s ease; }
+        .foot-link:hover { color: #8a5f00; border-color: #8a5f00 !important; }
+      `}</style>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <p
           style={{
-            fontSize: "clamp(28px, 4.5vw, 44px)",
+            fontSize: "clamp(24px, 3.5vw, 36px)",
             fontWeight: 800,
-            lineHeight: 1.15,
+            lineHeight: 1.2,
             letterSpacing: "-0.01em",
             margin: "0 0 8px",
           }}
         >
-          THANKS for
-          <br />
-          stopping by.
+          Thanks for stopping by.
         </p>
         <p
           style={{
-            fontSize: 20,
+            fontSize: 17,
             fontWeight: 700,
             margin: "0 0 28px",
           }}
@@ -79,6 +81,7 @@ export default function Footer() {
               href={l.href}
               target={l.href.startsWith("http") ? "_blank" : undefined}
               rel={l.href.startsWith("http") ? "noopener noreferrer" : undefined}
+              className="foot-link"
               style={{
                 color: TOKENS.ink,
                 fontSize: 15,

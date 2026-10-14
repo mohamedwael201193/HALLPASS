@@ -1,9 +1,10 @@
 /**
  * VibeBreak — the one allowed "vibe break" (design-standard §2):
- * a single all-caps word + ambient visual. No copy, no CTA.
+ * a single word + a quiet ambient mark. No copy, no CTA.
  * Palate cleanser between proof and features.
  *
- * Animation: transform/opacity keyframes only, reduced-motion gated.
+ * Restraint pass: smaller word, one slow breathing ring, no scanline,
+ * no strobing keyframes. Static fallback under reduced motion.
  */
 
 import { motion } from "framer-motion";
@@ -16,46 +17,38 @@ const TOKENS = {
 };
 
 export default function VibeBreak() {
-  const hidden = useHidden(60);
+  const hidden = useHidden(48);
   return (
     <section
       aria-hidden="true"
       style={{
         background: TOKENS.bg,
-        padding: "18vh 24px",
+        padding: "12vh 24px",
         overflow: "hidden",
         position: "relative",
         textAlign: "center",
       }}
     >
       <style>{`
-        @keyframes vibe-ring {
-          0%   { transform: scale(0.6); opacity: 0.9; }
-          100% { transform: scale(1.9); opacity: 0; }
+        @keyframes vibe-breathe {
+          0%, 100% { transform: scale(1); opacity: 0.35; }
+          50%      { transform: scale(1.12); opacity: 0.15; }
         }
-        @keyframes vibe-scan {
-          0%   { transform: translateX(-60%); opacity: 0; }
-          50%  { opacity: 1; }
-          100% { transform: translateX(60%); opacity: 0; }
-        }
-        .vibe-ring {
+        .vibe-breathe {
           transform-box: fill-box;
           transform-origin: center;
-          animation: vibe-ring 3.2s ease-out infinite;
+          animation: vibe-breathe 7s ease-in-out infinite;
         }
-        .vibe-ring.r2 { animation-delay: 1.05s; }
-        .vibe-ring.r3 { animation-delay: 2.1s; }
-        .vibe-scanline { animation: vibe-scan 5s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
-          .vibe-ring, .vibe-scanline { animation: none; opacity: 0.25; }
+          .vibe-breathe { animation: none; opacity: 0.25; }
         }
       `}</style>
 
-      {/* ambient visual: expanding pass-stamp rings + a slow scan line */}
+      {/* ambient mark: one slow-breathing permission ring */}
       <svg
-        width="420"
-        height="220"
-        viewBox="0 0 420 220"
+        width="360"
+        height="180"
+        viewBox="0 0 360 180"
         style={{
           position: "absolute",
           left: "50%",
@@ -63,14 +56,12 @@ export default function VibeBreak() {
           transform: "translate(-50%, -50%)",
           opacity: 0.5,
           pointerEvents: "none",
-          maxWidth: "90vw",
+          maxWidth: "80vw",
         }}
       >
-        <circle className="vibe-ring" cx="210" cy="110" r="34" fill="none" stroke={TOKENS.amber} strokeWidth="1.5" />
-        <circle className="vibe-ring r2" cx="210" cy="110" r="34" fill="none" stroke={TOKENS.amber} strokeWidth="1.5" />
-        <circle className="vibe-ring r3" cx="210" cy="110" r="34" fill="none" stroke={TOKENS.amber} strokeWidth="1.5" />
-        <circle cx="210" cy="110" r="7" fill={TOKENS.amber} opacity="0.9" />
-        <rect className="vibe-scanline" x="60" y="106" width="300" height="2" fill={TOKENS.amber} opacity="0.35" />
+        <circle className="vibe-breathe" cx="180" cy="90" r="52" fill="none" stroke={TOKENS.amber} strokeWidth="1.5" />
+        <circle cx="180" cy="90" r="30" fill="none" stroke={TOKENS.amber} strokeWidth="1" opacity="0.5" />
+        <circle cx="180" cy="90" r="5" fill={TOKENS.amber} opacity="0.8" />
       </svg>
 
       <motion.h2
@@ -83,9 +74,10 @@ export default function VibeBreak() {
           margin: 0,
           color: TOKENS.textDark,
           fontWeight: 900,
-          fontSize: "clamp(64px, 14vw, 160px)",
+          fontSize: "clamp(44px, 9vw, 104px)",
           letterSpacing: "0.02em",
           lineHeight: 0.95,
+          opacity: 0.92,
         }}
       >
         BOUNCER

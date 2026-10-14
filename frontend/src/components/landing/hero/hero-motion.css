@@ -1,0 +1,87 @@
+/* hero-motion.css — keyframes for the HALLPASS hero background.
+ *
+ * HARD RULES (perf):
+ *  - Only transform + opacity are animated. Never width/height/filter/SVG-stroke.
+ *  - NO blur() on animated layers: gradients fade by construction, so the
+ *    layer moves as one cheap texture instead of re-rasterizing every frame.
+ *    (Measured: large blurred animated layers dropped headless-software
+ *    rendering to ~6fps; gradient-only layers hold ~60fps.)
+ *  - All durations are long (9s–34s): slow, calm, no rave.
+ *  - will-change is used sparingly (transform on the three aurora blobs only).
+ *  - prefers-reduced-motion: EVERYTHING stops. The hero falls back to a
+ *    static warm gradient — no floating, no sweep, no dash drift.
+ */
+
+/* ---------- aurora blobs: slow drift + breathing scale ---------- */
+.hp-aurora-a {
+  will-change: transform;
+  animation: hp-aurora-a 26s ease-in-out infinite;
+}
+.hp-aurora-b {
+  will-change: transform;
+  animation: hp-aurora-b 34s ease-in-out infinite;
+}
+.hp-aurora-c {
+  will-change: transform;
+  animation: hp-aurora-c 30s ease-in-out infinite;
+}
+
+@keyframes hp-aurora-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(6vw, 4vh) scale(1.12); }
+}
+@keyframes hp-aurora-b {
+  0%, 100% { transform: translate(0, 0) scale(1.06); }
+  50%      { transform: translate(-5vw, -3vh) scale(1); }
+}
+@keyframes hp-aurora-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(4vw, -3vh) scale(1.08); }
+}
+
+/* ---------- beam sweep: one slow pass across the hero ---------- */
+.hp-beam {
+  will-change: transform;
+  animation: hp-beam 18s ease-in-out infinite;
+}
+@keyframes hp-beam {
+  0%   { transform: translateX(-30vw) skewX(-12deg); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateX(130vw) skewX(-12deg); opacity: 0; }
+}
+
+/* ---------- particles: gentle vertical drift + fade ---------- */
+.hp-particle {
+  opacity: 0.18;
+  animation: hp-particle-float 12s ease-in-out infinite;
+}
+@keyframes hp-particle-float {
+  0%, 100% { transform: translateY(10px); opacity: 0.08; }
+  50%      { transform: translateY(-16px); opacity: 0.30; }
+}
+
+/* ---------- ghost tag motif: barely-there float (transform only).
+   No stroke-dashoffset animation — that forces SVG repaint every frame.
+   The slow whole-element drift is composited and cheap. ---------- */
+.hp-tag-motif {
+  animation: hp-tag-float 22s ease-in-out infinite;
+}
+@keyframes hp-tag-float {
+  0%, 100% { transform: translateY(-50%) translateX(0) rotate(0deg); }
+  50%      { transform: translateY(calc(-50% - 18px)) translateX(-12px) rotate(-1.2deg); }
+}
+
+/* ---------- reduced motion: kill it ALL, static warm fallback ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .hp-aurora-a,
+  .hp-aurora-b,
+  .hp-aurora-c,
+  .hp-beam,
+  .hp-particle,
+  .hp-tag-motif {
+    animation: none !important;
+  }
+  .hp-beam { display: none; }
+  .hp-particle { opacity: 0.12; }
+}

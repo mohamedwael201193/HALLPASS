@@ -47,8 +47,25 @@ export default function Faq() {
   return (
     <section
       id="faq"
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "96px 24px" }}
+      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
     >
+      <style>{`
+        .faq-item { transition: border-color 0.25s ease; }
+        .faq-item:hover { border-color: rgba(255,178,36,0.45); }
+        .faq-item summary { position: relative; padding-right: 36px; }
+        .faq-item summary::-webkit-details-marker { display: none; }
+        .faq-item summary::marker { content: ""; }
+        .faq-item summary::after {
+          content: "+";
+          position: absolute; right: 6px; top: 50%;
+          transform: translateY(-50%);
+          color: #FFB224; font-size: 22px; font-weight: 700; line-height: 1;
+        }
+        .faq-item[open] summary::after { content: "\\2013"; }
+        @media (prefers-reduced-motion: reduce) {
+          .faq-item { transition: none; }
+        }
+      `}</style>
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
         <p
           style={{
@@ -64,7 +81,7 @@ export default function Faq() {
         </p>
         <h2
           style={{
-            fontSize: "clamp(34px, 5vw, 56px)",
+            fontSize: "clamp(30px, 4.5vw, 48px)",
             lineHeight: 1.05,
             letterSpacing: "-0.02em",
             margin: "0 0 40px",
@@ -77,6 +94,7 @@ export default function Faq() {
           {FAQS.map((f, i) => (
             <motion.details
               key={f.q}
+              className="faq-item"
               initial={hidden}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-40px" }}

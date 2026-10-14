@@ -118,7 +118,7 @@ export default function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="relative overflow-hidden bg-[#121110] py-28 md:py-40"
+      className="relative overflow-hidden bg-[#121110] py-24 md:py-32"
     >
       {/* the connecting thread down the timeline (desktop, static — no parallax) */}
       <div
@@ -132,7 +132,7 @@ export default function HowItWorks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.6, ease: EASE_OUT }}
-          className="mb-6 text-center text-sm font-semibold uppercase tracking-[0.3em] text-[#FFB224]"
+          className="mb-6 text-center text-[13px] font-bold uppercase tracking-[0.22em] text-[#FFB224]"
         >
           How it works.
         </motion.p>
@@ -141,7 +141,7 @@ export default function HowItWorks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="mx-auto max-w-3xl text-center text-5xl font-black leading-[1.02] tracking-tight text-[#FFF9EF] md:text-7xl"
+          className="mx-auto max-w-3xl text-center text-4xl font-black leading-[1.05] tracking-tight text-[#FFF9EF] md:text-6xl"
         >
           Five steps. <span className="text-[#FFB224]">Zero trust falls.</span>
         </motion.h2>
@@ -157,12 +157,12 @@ export default function HowItWorks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="mx-auto mt-16 max-w-3xl rounded-3xl bg-[#FFB224] p-8 text-center md:mt-24 md:p-12"
+          className="mx-auto mt-16 max-w-3xl rounded-3xl bg-[#FFB224] p-8 text-center md:mt-24 md:p-10"
         >
-          <p className="text-2xl font-black leading-tight text-[#121110] md:text-4xl">
+          <p className="text-xl font-black leading-tight text-[#121110] md:text-3xl">
             Every step above is real — proven on Arc mainnet, not a mockup.
           </p>
-          <p className="mt-3 text-lg font-medium leading-[1.6] text-[#121110]/75">
+          <p className="mt-3 text-base font-medium leading-[1.6] text-[#121110]/75 md:text-lg">
             Install, in-policy spend, over-cap revert, revoke: all executed
             on-chain. Check the chain yourself in the live proof below.
           </p>
@@ -193,7 +193,7 @@ function StepRow({ step, index }: { step: (typeof STEPS)[number]; index: number 
           left ? "md:col-start-1 md:mr-4" : "md:col-start-2 md:ml-4"
         } ${
           "amber" in step && step.amber
-            ? "border-[#FFB224]/40 bg-gradient-to-br from-[#1A1815] to-[#241a08] shadow-[0_20px_70px_-24px_rgba(255,178,36,0.45)]"
+            ? "border-[#FFB224]/40 bg-gradient-to-br from-[#1A1815] to-[#241a08] shadow-[0_16px_48px_-24px_rgba(255,178,36,0.3)]"
             : "border-[#FFB224]/10 bg-[#1A1815]"
         }`}
       >

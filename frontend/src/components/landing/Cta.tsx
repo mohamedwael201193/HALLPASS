@@ -1,5 +1,5 @@
 /**
- * Cta — the final ask. Big, amber, confident.
+ * Cta — the final ask. Amber band, confident but restrained.
  *
  * Design-standard §6: the page's single primary CTA belongs to the hero,
  * so this band uses ghost/outline buttons only — no competing primary.
@@ -19,21 +19,26 @@ export default function Cta() {
       style={{
         background: TOKENS.amber,
         color: "#121110",
-        padding: "110px 24px",
+        padding: "clamp(72px, 8vw, 96px) 24px",
         textAlign: "center",
       }}
     >
+      <style>{`
+        .cta-btn { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+        .cta-btn-solid:hover { background: #121110 !important; color: #FFB224 !important; }
+        .cta-btn-ghost:hover { border-color: #121110 !important; background: rgba(18,17,16,0.08); }
+      `}</style>
       <motion.div
         initial={hidden}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.7, ease: EASE_OUT }}
-        style={{ maxWidth: 860, margin: "0 auto" }}
+        style={{ maxWidth: 820, margin: "0 auto" }}
       >
         <h2
           style={{
-            fontSize: "clamp(36px, 6vw, 64px)",
-            lineHeight: 1.15,
+            fontSize: "clamp(28px, 4.5vw, 48px)",
+            lineHeight: 1.18,
             letterSpacing: "-0.01em",
             fontWeight: 800,
             margin: "0 0 16px",
@@ -43,7 +48,7 @@ export default function Cta() {
         </h2>
         <p
           style={{
-            fontSize: 18,
+            fontSize: 17,
             lineHeight: 1.6,
             maxWidth: 620,
             margin: "0 auto 36px",
@@ -64,13 +69,14 @@ export default function Cta() {
         >
           <a
             href="#live-proof"
+            className="cta-btn cta-btn-solid"
             style={{
               display: "inline-block",
               background: "transparent",
               color: "#121110",
               fontWeight: 700,
-              fontSize: 17,
-              padding: "15px 34px",
+              fontSize: 16,
+              padding: "15px 32px",
               borderRadius: 12,
               textDecoration: "none",
               border: "2px solid #121110",
@@ -80,13 +86,14 @@ export default function Cta() {
           </a>
           <a
             href="#faq"
+            className="cta-btn cta-btn-ghost"
             style={{
               display: "inline-block",
               background: "transparent",
               color: "#121110",
               fontWeight: 700,
-              fontSize: 17,
-              padding: "15px 34px",
+              fontSize: 16,
+              padding: "15px 32px",
               borderRadius: 12,
               textDecoration: "none",
               border: "2px solid rgba(18,17,16,0.45)",

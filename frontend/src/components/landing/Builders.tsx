@@ -35,8 +35,13 @@ export default function Builders() {
   const hidden = useHidden(40);
   return (
     <section
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "96px 24px" }}
+      id="builders"
+      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
     >
+      <style>{`
+        .builder-btn { transition: background 0.2s ease, color 0.2s ease; }
+        .builder-btn:hover { background: #FFB224 !important; color: #121110 !important; }
+      `}</style>
       <motion.div
         initial={hidden}
         whileInView={{ opacity: 1, y: 0 }}
@@ -58,7 +63,7 @@ export default function Builders() {
         </p>
         <h2
           style={{
-            fontSize: "clamp(34px, 5vw, 56px)",
+            fontSize: "clamp(30px, 4.5vw, 48px)",
             lineHeight: 1.05,
             letterSpacing: "-0.02em",
             margin: "0 0 12px",
@@ -98,6 +103,7 @@ export default function Builders() {
         >
           <a
             href="#live-proof"
+            className="builder-btn"
             style={{
               display: "inline-block",
               background: "transparent",

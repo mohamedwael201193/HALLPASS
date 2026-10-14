@@ -57,7 +57,7 @@ const FEATURES: Feature[] = [
     tagline: "One transaction can never outrun the ceiling.",
     visual: (
       <Glyph>
-        <rect x="14" y="30" width="30" height="6" rx="3" fill={A} className="fx-bar" />
+        <rect x="14" y="30" width="30" height="6" rx="3" fill={A} />
         <rect x="14" y="42" width="44" height="6" rx="3" fill={A} opacity="0.35" />
         <path d="M58 33 L66 33 M62 29 L62 37" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
       </Glyph>
@@ -72,8 +72,8 @@ const FEATURES: Feature[] = [
     tagline: "The budget refills on your schedule, not the agent's.",
     visual: (
       <Glyph>
-        <circle cx="36" cy="36" r="22" fill="none" stroke={A} strokeWidth="2.5" className="fx-spin" />
-        <circle cx="36" cy="36" r="22" fill="none" stroke={A} strokeWidth="2.5" strokeDasharray="34 104" strokeLinecap="round" className="fx-spin" />
+        <circle cx="36" cy="36" r="22" fill="none" stroke={A} strokeWidth="2.5" />
+        <circle cx="36" cy="36" r="22" fill="none" stroke={A} strokeWidth="2.5" strokeDasharray="34 104" strokeLinecap="round" />
         <circle cx="36" cy="36" r="4" fill={A} />
       </Glyph>
     ),
@@ -88,8 +88,8 @@ const FEATURES: Feature[] = [
     visual: (
       <Glyph>
         <circle cx="36" cy="38" r="20" fill="none" stroke={A} strokeWidth="2.5" />
-        <line x1="36" y1="38" x2="36" y2="26" stroke={A} strokeWidth="2.5" strokeLinecap="round" className="fx-hand" />
-        <line x1="36" y1="38" x2="46" y2="42" stroke={A} strokeWidth="2.5" strokeLinecap="round" className="fx-hand" />
+        <line x1="36" y1="38" x2="36" y2="26" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="36" y1="38" x2="46" y2="42" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
         <line x1="30" y1="10" x2="42" y2="10" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
       </Glyph>
     ),
@@ -105,7 +105,7 @@ const FEATURES: Feature[] = [
       <Glyph>
         <rect x="18" y="14" width="36" height="44" rx="6" fill="none" stroke={A} strokeWidth="2.5" />
         <line x1="26" y1="26" x2="46" y2="26" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="26" y1="36" x2="46" y2="36" stroke={A} strokeWidth="2.5" strokeLinecap="round" className="fx-bar" />
+        <line x1="26" y1="36" x2="46" y2="36" stroke={A} strokeWidth="2.5" strokeLinecap="round" />
         <line x1="26" y1="46" x2="38" y2="46" stroke={A} strokeWidth="2.5" strokeLinecap="round" opacity="0.45" />
       </Glyph>
     ),
@@ -119,7 +119,7 @@ const FEATURES: Feature[] = [
     tagline: "The policy holds where signatures live, too.",
     visual: (
       <Glyph>
-        <path d="M20 52 L34 20 L40 32 L46 20 L60 52" fill="none" stroke={A} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="fx-draw" />
+        <path d="M20 52 L34 20 L40 32 L46 20 L60 52" fill="none" stroke={A} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         <line x1="28" y1="44" x2="52" y2="44" stroke={A} strokeWidth="2.5" strokeLinecap="round" opacity="0.45" />
       </Glyph>
     ),
@@ -134,7 +134,7 @@ const FEATURES: Feature[] = [
     visual: (
       <Glyph>
         <circle cx="36" cy="36" r="20" fill="none" stroke={A} strokeWidth="2.5" />
-        <line x1="22" y1="22" x2="50" y2="50" stroke={A} strokeWidth="3" strokeLinecap="round" className="fx-strike" />
+        <line x1="22" y1="22" x2="50" y2="50" stroke={A} strokeWidth="3" strokeLinecap="round" />
       </Glyph>
     ),
   },
@@ -147,7 +147,7 @@ const FEATURES: Feature[] = [
     tagline: "Not a bolt-on. A first-class citizen of the account.",
     visual: (
       <Glyph>
-        <rect x="22" y="22" width="28" height="28" rx="4" fill="none" stroke={A} strokeWidth="2.5" className="fx-pulse" />
+        <rect x="22" y="22" width="28" height="28" rx="4" fill="none" stroke={A} strokeWidth="2.5" />
         <rect x="30" y="30" width="12" height="12" rx="2" fill={A} />
       </Glyph>
     ),
@@ -212,21 +212,8 @@ function Module({ f, index }: { f: Feature; index: number }) {
 export default function Features() {
   return (
     <section
-      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "96px 24px" }}
+      style={{ background: TOKENS.bg, color: TOKENS.textDark, padding: "clamp(96px, 10vw, 128px) 24px" }}
     >
-      <style>{`
-        @keyframes fx-spin-k { to { transform: rotate(360deg); } }
-        @keyframes fx-pulse-k { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.7; } }
-        @keyframes fx-slide-k { 0%,100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
-        .fx-spin { transform-box: fill-box; transform-origin: center; animation: fx-spin-k 9s linear infinite; }
-        .fx-pulse { transform-box: fill-box; transform-origin: center; animation: fx-pulse-k 3.4s ease-in-out infinite; }
-        .fx-hand { transform-box: fill-box; transform-origin: 36px 38px; animation: fx-spin-k 24s linear infinite; }
-        .fx-bar { animation: fx-slide-k 4s ease-in-out infinite; }
-        .fx-strike, .fx-draw { animation: fx-pulse-k 5s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .fx-spin, .fx-pulse, .fx-hand, .fx-bar, .fx-strike, .fx-draw { animation: none; }
-        }
-      `}</style>
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
         <p
           style={{
@@ -242,7 +229,7 @@ export default function Features() {
         </p>
         <h2
           style={{
-            fontSize: "clamp(34px, 5vw, 56px)",
+            fontSize: "clamp(30px, 4.5vw, 48px)",
             lineHeight: 1.15,
             letterSpacing: "-0.01em",
             margin: "0 0 48px",

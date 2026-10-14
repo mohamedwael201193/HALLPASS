@@ -117,13 +117,13 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.7, ease: EASE_OUT, delay: index * 0.12 }}
       aria-label={card.name}
-      className="relative rounded-2xl border-2 border-dashed border-[#FFB224]/40 bg-[#FAF6EE] p-7 text-[#121110] shadow-[0_20px_60px_-20px_rgba(255,178,36,0.35)] md:p-8"
+      className="relative rounded-2xl border border-[#FFB224]/30 bg-[#FAF6EE] p-7 text-[#121110] shadow-[0_16px_48px_-24px_rgba(255,178,36,0.28)] md:p-8"
     >
       {/* punched hole — the slip hangs on the classroom peg */}
-      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border-2 border-dashed border-[#FFB224]/60 bg-[#121110]" />
+      <div aria-hidden className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border border-dashed border-[#FFB224]/60 bg-[#121110]" />
 
       {/* 1 · label */}
-      <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#121110]/55">
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#121110]/55">
         {card.label}
       </p>
 
@@ -145,12 +145,12 @@ function BoundModule({ card, index }: { card: BoundCard; index: number }) {
       </p>
 
       {/* 4 · imperative how-to */}
-      <p className="mt-4 border-t-2 border-dashed border-[#121110]/15 pt-4 text-base leading-relaxed text-[#121110]/80">
+      <p className="mt-4 border-t border-[#121110]/10 pt-4 text-base leading-relaxed text-[#121110]/80">
         {card.howTo}
       </p>
 
       {/* 5 · name as heading */}
-      <h3 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight">
+      <h3 className="mt-5 text-2xl font-extrabold leading-tight tracking-tight">
         {card.name}
       </h3>
 
@@ -171,12 +171,11 @@ export default function Metaphor() {
   return (
     <section
       id="metaphor"
-      className="relative overflow-hidden bg-[#121110] py-28 md:py-40"
+      className="relative overflow-hidden bg-[#121110] py-24 md:py-32"
     >
-      {/* static amber permission rings — no animation (ambient loops capped by §5) */}
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FFB224]/10" />
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[640px] w-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FFB224]/15" />
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_55%_45%_at_50%_35%,rgba(255,178,36,0.10),transparent)]" />
+      {/* static amber permission ring — ambient, kept quiet */}
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[760px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FFB224]/10" />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_55%_45%_at_50%_35%,rgba(255,178,36,0.07),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-6 md:px-10">
         <motion.p
@@ -184,7 +183,7 @@ export default function Metaphor() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.6, ease: EASE_OUT }}
-          className="mb-6 text-center text-sm font-semibold uppercase tracking-[0.3em] text-[#FFB224]"
+          className="mb-6 text-center text-[13px] font-bold uppercase tracking-[0.22em] text-[#FFB224]"
         >
           The idea, in one sentence.
         </motion.p>
@@ -196,7 +195,7 @@ export default function Metaphor() {
           transition={{ duration: 0.7, ease: EASE_OUT }}
           className="mx-auto max-w-4xl text-center"
         >
-          <p className="text-4xl font-black leading-[1.1] tracking-tight text-[#FFF9EF] md:text-6xl">
+          <p className="text-3xl font-black leading-[1.12] tracking-tight text-[#FFF9EF] md:text-5xl">
             &ldquo;You may leave the room —{" "}
             <span className="text-[#FFB224]">but only to the bathroom,</span>{" "}
             and only until the{" "}

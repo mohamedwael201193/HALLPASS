@@ -94,7 +94,7 @@ export default function Problem() {
   return (
     <section
       id="problem"
-      className="relative overflow-hidden bg-[#121110] py-28 md:py-40"
+      className="relative overflow-hidden bg-[#121110] py-24 md:py-32"
     >
       {/* faint denied-red wash — the only place red lives on the page */}
       <div
@@ -107,7 +107,7 @@ export default function Problem() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.6, ease: EASE_OUT }}
-          className="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-[#FFB224]"
+          className="mb-6 text-[13px] font-bold uppercase tracking-[0.22em] text-[#FFB224]"
         >
           The problem.
         </motion.p>
@@ -116,7 +116,7 @@ export default function Problem() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="max-w-4xl text-5xl font-black leading-[1.02] tracking-tight text-[#FFF9EF] md:text-7xl"
+          className="max-w-4xl text-4xl font-black leading-[1.05] tracking-tight text-[#FFF9EF] md:text-6xl"
         >
           Your agent has your keys. That&apos;s <span className="text-[#FFB224]">insane.</span>
         </motion.h2>
@@ -142,10 +142,10 @@ export default function Problem() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="mt-12 flex flex-col gap-5 rounded-3xl border border-[#FFB224]/25 bg-gradient-to-br from-[#1A1815] to-[#211a0e] p-8 md:mt-16 md:flex-row md:items-center md:gap-10 md:p-12"
+          className="mt-12 flex flex-col gap-6 rounded-3xl border border-[#FFB224]/25 bg-[#191612] p-8 md:mt-16 md:flex-row md:items-center md:gap-10 md:p-10"
         >
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#FFB224] md:h-20 md:w-20">
-            <svg viewBox="0 0 32 32" className="h-9 w-9 md:h-11 md:w-11" fill="none" stroke="#121110" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#FFB224]/15 ring-1 ring-[#FFB224]/40 md:h-16 md:w-16">
+            <svg viewBox="0 0 32 32" className="h-8 w-8 md:h-9 md:w-9" fill="none" stroke="#FFB224" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M7 24 L24 7" />
               <path d="M16 7 h8 v8" />
             </svg>
