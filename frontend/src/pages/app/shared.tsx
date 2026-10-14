@@ -7,7 +7,7 @@
 import { Component, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { isAddress, type Address } from 'viem';
-import { arc, WALLET_SETUP_ERROR } from '../../lib/wagmi';
+import { arc, WALLET_SETUP_ERROR, WALLET_READY } from '../../lib/wagmi';
 import { useHallpass, type UseHallpass } from '../../lib/useHallpass';
 
 /* ------------------------------------------------------------------ */
@@ -162,9 +162,12 @@ export async function fetchAccountPlugins(
 }
 
 /* ------------------------------------------------------------------ */
-/* Wallet gate — useHallpass() throws when the wallet stack isn't      */
-/* ready (no WagmiProvider yet, or no Reown project id). The boundary  */
-/* converts that into an honest state instead of a crash.              */
+/* Wallet gate — P1 (2026-10-15): useHallpass() NEVER throws for the      */
+/* unconfigured state (it returns a static DOWN object with zero wagmi    */
+/* hooks called), so this gate renders the honest WalletDownState         */
+/* directly — no error is ever raised, the console stays clean, and the   */
+/* zero-page-errors requirement holds. WalletErrorBoundary remains as a   */
+/* safety net for genuinely unexpected failures only.                     */
 /* ------------------------------------------------------------------ */
 
 export class WalletErrorBoundary extends Component<
@@ -192,6 +195,10 @@ function HallpassInner({
   render: (hp: UseHallpass) => ReactNode;
 }) {
   const hp = useHallpass();
+  if (!hp.walletReady) {
+    // Config gap — nothing threw (P1): the honest state renders directly.
+    return <WalletDownState />;
+  }
   return <>{render(hp)}</>;
 }
 
@@ -247,6 +254,12 @@ export function HallpassGate({
   render: (hp: UseHallpass) => ReactNode;
   fallback?: ReactNode;
 }) {
+  if (!WALLET_READY) {
+    // Config gap — the hook-calling inner component never mounts, so no
+    // wagmi hook runs and nothing throws. Render the caller's compact
+    // fallback when it has one, else the full WalletDownState.
+    return <>{fallback ?? <WalletDownState />}</>;
+  }
   return (
     <WalletErrorBoundary fallback={fallback ?? <WalletDownState />}>
       <HallpassInner render={render} />

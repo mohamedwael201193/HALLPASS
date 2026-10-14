@@ -111,7 +111,63 @@ const PLUGIN_CONFIG_ERROR =
   '(VITE_PLUGIN_ADDRESS). The deploy step must set it after Sourcify exact_match ' +
   'verification — see bible §5.2.';
 
+/**
+ * P1 (2026-10-15): ZERO-THROW wallet-down path. When the wallet stack is not
+ * configured (no Reown project id → no WagmiProvider), this hook calls NO
+ * wagmi hooks at all and returns a static DOWN object — nothing throws, so
+ * React never sees an error and the console stays clean. The `if` below is
+ * safe for hook order because WALLET_READY is a module-level constant that
+ * can never change during a session.
+ */
 export function useHallpass(): UseHallpass {
+  if (!WALLET_READY) return DOWN_HALLPASS;
+  return useHallpassLive();
+}
+
+/** Static hook surface for the unconfigured state — pure helpers work, chain
+ *  reads/writes reject with the setup reason. No hooks, no throw. */
+const DOWN_SETUP_ERROR =
+  WALLET_SETUP_ERROR ?? 'Wallet is not configured.';
+
+function downReject(): Promise<never> {
+  return Promise.reject(new Error(DOWN_SETUP_ERROR));
+}
+
+const DOWN_HALLPASS: UseHallpass = {
+  walletReady: false,
+  walletSetupError: DOWN_SETUP_ERROR,
+  address: undefined,
+  isConnected: false,
+  isArc: false,
+  connect: () => {},
+  switchToArc: () => {},
+  pluginAddress: PLUGIN_ADDRESS,
+  pluginConfigError: PLUGIN_ADDRESS ? null : PLUGIN_CONFIG_ERROR,
+  getInstalledPlugins: () => downReject(),
+  isPluginInstalled: () => downReject(),
+  getPolicy: () => downReject(),
+  getUsdcBalance: () => downReject(),
+  fetchManifestHash: () => downReject(),
+  verifyPlugin: () => downReject(),
+  installPluginDirect: () => downReject(),
+  buildInstallUserOp: () => downReject(),
+  signAndSendUserOp: () => downReject(),
+  revokeSession: () => downReject(),
+  updatePolicy: () => downReject(),
+  topUpEntryPointDeposit: () => downReject(),
+  generateSessionKey: () => {
+    const privateKey = generatePrivateKey();
+    const acct = privateKeyToAccount(privateKey);
+    return { address: acct.address, privateKey };
+  },
+  decodeRevert: decodeHallpassRevert,
+  formatNativeUsdc,
+  usdcToNativeWei,
+  estimatePrefund,
+  getEntryPointDeposit: () => downReject(),
+};
+
+function useHallpassLive(): UseHallpass {
   const { address, isConnected, chainId } = useAccount();
   const { open } = useAppKit();
   const wagmiPublicClient = usePublicClient();
