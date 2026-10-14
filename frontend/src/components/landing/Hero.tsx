@@ -4,7 +4,7 @@ import Logo from "./Logo";
 import heroImg from "../../assets/hero.png";
 
 type Stats = {
-  pluginsInstalled: number;
+  accounts: number;
   spendsAllowed: number;
   spendsBlocked: number;
   source?: string;
@@ -13,24 +13,25 @@ type Stats = {
 /**
  * Live stats are rendered ONLY when the API returns real values.
  * Per design law §3: no real stat → the row is omitted. Never zeros-with-caption.
- * "Real" means the API's source field says hallpass-indexer — an
- * indexer-unavailable/degraded response renders NOTHING, not zeros.
+ * "Real" means the API's source field says indexer — any other/degraded
+ * response renders NOTHING, not zeros. Endpoint: GET /api/v1/stats
+ * (CONTRACT.md §4.5 — real COUNT(*) over the indexer event cache).
  */
 function useLiveStats(): Stats | null {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/stats")
+    fetch("/api/v1/stats")
       .then((r) => {
         if (!r.ok) throw new Error("stats unavailable");
         return r.json();
       })
       .then((data: Stats) => {
-        const vals = [data.pluginsInstalled, data.spendsAllowed, data.spendsBlocked];
+        const vals = [data.accounts, data.spendsAllowed, data.spendsBlocked];
         if (
           !cancelled &&
-          data.source === "hallpass-indexer" &&
+          data.source === "indexer" &&
           vals.every((v) => Number.isFinite(v))
         )
           setStats(data);
@@ -187,7 +188,7 @@ export default function Hero() {
             >
               {(
                 [
-                  { value: stats.pluginsInstalled, label: "plugins installed" },
+                  { value: stats.accounts, label: "accounts protected" },
                   { value: stats.spendsAllowed, label: "spends allowed" },
                   { value: stats.spendsBlocked, label: "spends blocked" },
                 ] as const

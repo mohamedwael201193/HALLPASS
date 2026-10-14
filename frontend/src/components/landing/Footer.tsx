@@ -97,7 +97,8 @@ export default function Footer() {
         </p>
         <p style={{ color: TOKENS.muted, fontSize: 12.5, margin: 0 }}>
           *every address and transaction hash on this page is a real Arc mainnet
-          record — nothing here is a demo, mock, or placeholder.
+          record — click any card to check it on the explorer yourself. The app
+          screens behind the links are still being built; each one says so.
         </p>
       </div>
     </footer>

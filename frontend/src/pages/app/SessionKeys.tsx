@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useHallpass } from '../../lib/useHallpass'
+import { type UseHallpass } from '../../lib/useHallpass'
+import { HallpassGate, WalletDownState } from './shared'
 import EmptyState from '../../components/EmptyState'
 import ErrorState from '../../components/ErrorState'
 
 /* ============================================================================
  * SessionKeys — the hall passes on one smart account.
- * - Rows come ONLY from GET /api/accounts/{address}/policies (indexer cache;
- *   the chain is truth). Amounts use the API's `formatted` USDC strings —
- *   raw values are 6-decimal Arc USDC, NOT 18-decimal wei.
+ * - Rows come ONLY from GET /api/v1/accounts/{address}/sessions (CONTRACT.md
+ *   §4.4 — RPC-backed, the chain is truth). Amounts are the API's USDC
+ *   display strings formatted from native wei (18 decimals, bible §4.2).
  * - The on-chain overlay (owner, live window spend) comes from
  *   useHallpass().getPolicy — the chain, not the cache.
+ * - The policies() getter omits the dynamic allowlist array, so the
+ *   destination list is honestly reported as unavailable from this endpoint.
  * - Revoke is a REAL on-chain transaction via useHallpass().revokeSession
  *   with a plain-words confirm dialog. Disabled buttons always name the
  *   reason inline.
@@ -35,8 +38,11 @@ interface ApiSession {
   expiresInSeconds: number | null
   allowlist: string[]
   allowlistOpen: boolean
-  updatedAtBlock: number
-  updatedInTx: string
+  /** True when the endpoint cannot report the allowlist (policies() getter
+   *  omits the dynamic array) — rendered honestly, never guessed. */
+  allowlistUnknown?: boolean
+  updatedAtBlock: number | null
+  updatedInTx: string | null
   revokedAtBlock?: number
   revokedInTx?: string
 }
@@ -191,7 +197,21 @@ function KeySkeleton() {
 
 /* --------------------------------- page ----------------------------------- */
 
+/**
+ * Default export — the wallet gate. useHallpass() throws when the wallet
+ * stack isn't ready (no provider yet, or no Reown project id); the boundary
+ * turns that into the honest WalletDownState instead of a crash.
+ */
 export default function SessionKeys({ accountAddress }: SessionKeysProps) {
+  return (
+    <HallpassGate
+      render={(hp) => <SessionKeysLive hp={hp} accountAddress={accountAddress} />}
+      fallback={<WalletDownState />}
+    />
+  )
+}
+
+function SessionKeysLive({ hp, accountAddress }: SessionKeysProps & { hp: UseHallpass }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const account = accountAddress ?? searchParams.get('account') ?? ''
@@ -205,7 +225,7 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
     getPolicy,
     revokeSession,
     formatNativeUsdc,
-  } = useHallpass()
+  } = hp
 
   const [state, setState] = useState<LoadState>('loading')
   const [sessions, setSessions] = useState<ApiSession[]>([])
@@ -231,7 +251,7 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
     setState('loading')
     setErrorDetail('')
     try {
-      const res = await fetch(`${API_BASE}/api/accounts/${account}/policies`)
+      const res = await fetch(`${API_BASE}/api/v1/accounts/${account}/sessions`)
       if (!res.ok) {
         let detail = `API responded ${res.status}`
         try {
@@ -243,11 +263,36 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
         throw new Error(detail)
       }
       const body = await res.json()
-      const list: ApiSession[] = Array.isArray(body?.data?.sessions) ? body.data.sessions : []
+      // CONTRACT.md §4.4 shape -> local ApiSession model. The RPC-backed
+      // sessions endpoint carries no allowlist (the policies() getter omits
+      // the dynamic array) — flagged honestly instead of invented.
+      const fetchedAt = Date.now()
+      const rawList: any[] = Array.isArray(body?.sessions) ? body.sessions : []
+      const list: ApiSession[] = rawList.map((s) => {
+        const revoked = s?.revoked === true
+        const expired = s?.expired === true
+        const expiresAt = typeof s?.expiresAt === 'number' ? s.expiresAt : null
+        const perTxCap = typeof s?.perTxCap === 'string' ? s.perTxCap : '0'
+        const windowCap = typeof s?.windowCap === 'string' ? s.windowCap : '0'
+        return {
+          sessionKey: typeof s?.sessionKey === 'string' ? s.sessionKey : null,
+          status: revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'ACTIVE',
+          perTxCap: { raw: perTxCap, formatted: perTxCap, unit: 'USDC' },
+          windowCap: { raw: windowCap, formatted: windowCap, unit: 'USDC' },
+          expiry: expiresAt,
+          expiresInSeconds:
+            expiresAt == null ? null : Math.max(0, Math.round(expiresAt - fetchedAt / 1000)),
+          allowlist: [],
+          allowlistOpen: false,
+          allowlistUnknown: true,
+          updatedAtBlock: null,
+          updatedInTx: null,
+        } as ApiSession
+      })
       setSessions(list)
-      setFetchedAtMs(Date.now())
+      setFetchedAtMs(fetchedAt)
       setAsOfBlock(typeof body?.asOfBlock === 'number' ? body.asOfBlock : null)
-      setListNote(typeof body?.data?.note === 'string' ? body.data.note : null)
+      setListNote('Live from the chain — amounts in USDC.')
       setState(list.length === 0 ? 'empty' : 'ready')
     } catch (e: any) {
       setErrorDetail(e?.message ?? 'Network error')
@@ -465,7 +510,11 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
                       </Chip>
                     )}
                     <Chip>
-                      {s.allowlistOpen ? (
+                      {s.allowlistUnknown ? (
+                        <span title="The policies() getter omits the allowlist array — read install events for it.">
+                          Destination list: on-chain only
+                        </span>
+                      ) : s.allowlistOpen ? (
                         <span>Any destination — caps still apply</span>
                       ) : (
                         <span>
@@ -525,8 +574,8 @@ export default function SessionKeys({ accountAddress }: SessionKeysProps) {
           </div>
 
           <p className="mt-6 font-body text-xs text-text/40">
-            {listNote ?? 'Latest policy per session key, with revocation overlaid.'}
-            {asOfBlock != null && <> Indexer at block {asOfBlock.toLocaleString()}.</>}
+            {listNote ?? 'Live policy per session key, read from the chain.'}
+            {asOfBlock != null && <> Chain at block {asOfBlock.toLocaleString()}.</>}
           </p>
         </>
       )}

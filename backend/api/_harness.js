@@ -21,6 +21,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+// Node 24: `after()` registered inside a `before` hook fires immediately
+// after the hook — before any test runs. So teardown is registered once at
+// module top level (attaches to the requiring file's root suite, which runs
+// after all describes in that file), and startTestServer only enqueues.
+const { after: afterSuite } = require('node:test');
+const _servers = [];
+afterSuite(async () => {
+  for (const s of _servers.splice(0)) {
+    try { await s.api.close(); } catch (e) { /* ignore */ }
+    try { fs.rmSync(s.dir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  }
+});
 
 const API_DIR = __dirname;
 const SERVER_PATH = path.join(API_DIR, 'server.js');
@@ -76,10 +88,7 @@ async function startTestServer(t, { rpcUrl = null } = {}) {
       `CONTRACT VIOLATION: api.port must be the bound port after start(), got ${String(port)}.`
     );
   }
-  t.after(async () => {
-    await api.close();
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
+  _servers.push({ api, dir });
   return { baseUrl: `http://127.0.0.1:${port}`, dbPath, dir };
 }
 

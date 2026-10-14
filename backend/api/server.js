@@ -1,557 +1,788 @@
-// HALLPASS REST API
-// ------------------
+'use strict';
+// HALLPASS REST API — CONTRACT.md v1.0.0 implementation.
+// ======================================================
 // Read layer for the HallpassPlugin ERC-6900 v0.7 policy plugin on Arc
 // mainnet (chain 5042).
 //
+// Authority: backend/api/CONTRACT.md. Tests in backend/api/*.test.js are
+// written against the contract; this file is the implementation under test.
+//
 // Architecture rule (build bible §3): the indexer is a CACHE; the chain is
-// the source of truth. Every response carries `source: "indexer" | "chain"`
-// and `asOfBlock` so callers can see exactly how fresh the data is. Where a
-// fresh read matters (plugin install state), `?fresh=true` re-reads the
-// chain directly via eth_call instead of the cache.
+// the source of truth. RPC-backed endpoints re-read the chain live and
+// return 503 RPC_UNAVAILABLE (labeled, never fake) when the RPC is absent
+// or unreachable. Indexer-backed endpoints read the event cache; an empty
+// database yields honest empty states, never invented numbers.
 //
-// No secrets anywhere here: this server never reads keys, never signs, and
-// never exposes private configuration. The RPC URL and public contract
-// addresses are public config and also served by GET /api/config.
+// Amounts: policy caps and spend amounts are NATIVE WEI (18 decimals — the
+// native gas USDC on Arc; build bible §4.2: "0.01 USDC cap = 10000000000000000").
+// Display strings are formatted with 18 decimals and trimmed ("0.01", "0").
 //
-// No mock data: if the indexer DB is empty or the account has no rows, the
-// API returns empty arrays — never fabricated entries.
+// No secrets: this server never reads keys, never signs, and never exposes
+// the RPC URL, filesystem paths, or any secret in any response (CONTRACT §9.5).
 //
-// Usage:
-//   PORT=8787 DB_PATH=/path/to/db.sqlite node server.js
-//   curl localhost:8787/health
-//   curl 'localhost:8787/api/accounts/0xABC.../plugins?fresh=true'
-//   curl 'localhost:8787/api/accounts/0xABC.../policies'
-//   curl 'localhost:8787/api/activity?account=0xABC...&page=1&limit=25'
-//   curl localhost:8787/api/config
+// Module interface (CONTRACT §7):
+//   const { createServer } = require('./server');
+//   const api = createServer({ dbPath, rpcUrl, chainId, port });
+//   await api.start(); /* ... */ await api.close();
+// CLI: PORT=8787 DB_PATH=/path/to/db.sqlite RPC_URL=... CHAIN_ID=5042 node server.js
 
-const express = require("express");
-const cors = require("cors");
-const path = require("path");
-const { ethers } = require("ethers");
-// better-sqlite3 is native; if it cannot load (e.g. no build toolchain on a
-// fresh host), the API stays up and answers honestly instead of crashing.
+const fs = require('node:fs');
+const path = require('node:path');
+
+let express = null;
+try {
+  express = require('express');
+} catch (e) { /* reported clearly in createServer */ }
+let cors = null;
+try {
+  cors = require('cors');
+} catch (e) { /* optional */ }
 let Database = null;
 try {
-  Database = require("better-sqlite3");
-} catch (e) {
-  console.error(
-    "WARN: better-sqlite3 failed to load — indexer-cache endpoints will report unavailable. " +
-      e.message
-  );
-}
+  Database = require('better-sqlite3');
+} catch (e) { /* graceful: indexer endpoints report DB_UNAVAILABLE */ }
+let ethers = null;
+try {
+  ethers = require('ethers');
+} catch (e) { /* graceful: RPC endpoints report RPC_UNAVAILABLE */ }
 
-// ---------- public configuration ----------
-// All public on-chain facts (RPC-verified on Arc mainnet, 2026-10-14).
-const CHAIN_ID = 5042;
-const RPC_URL = process.env.RPC_URL || "https://rpc.mainnet.arc.io";
-const EXPLORER_BASE = "https://explorer.arc.io";
-const ENTRYPOINT_V07 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
-const MSCA_IMPL = "0xA70F1296869DA9D7CB69578123F21888E6dB2B62";
-const ARC_USDC = "0x3600000000000000000000000000000000000000";
-const ARC_USDC_DECIMALS = 6;
-// Last H9-proven minimal plugin deployment (mainnet, Sourcify exact_match).
-// Overridden by PLUGIN_ADDRESS for production deployments.
-const PLUGIN_ADDRESS =
-  (process.env.PLUGIN_ADDRESS || "").trim() ||
-  "0x5780e3DEd211ee13494909432C89Be7b8D6441A3";
+const VERSION = '1.0.0';
+const DEFAULT_CHAIN_ID = 5042;
+// H9-proven minimal plugin deployment (Arc mainnet). Overridden by
+// PLUGIN_ADDRESS env for production deployments.
+const DEFAULT_PLUGIN_ADDRESS = '0x5780e3DEd211ee13494909432C89Be7b8D6441A3';
 
-// ---------- db ----------
-// Same SQLite store the indexer writes (better-sqlite3, read-only here).
-const DB_PATH =
-  process.env.DB_PATH || path.resolve(__dirname, "../indexer/db.sqlite");
-
-let db = null;
-let dbLoadError = null;
-function openDb() {
-  if (db) return db;
-  if (!Database) {
-    throw new Error(
-      "better-sqlite3 is not available in this runtime, so the indexer cache cannot be read."
-    );
-  }
-  db = new Database(DB_PATH, { readonly: true, fileMustExist: false });
-  db.pragma("journal_mode = WAL");
-  return db;
-}
-function dbTablesExist() {
-  try {
-    const row = openDb()
-      .prepare(
-        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('plugin_installs','policy_updates','revokes','validation_results','indexer_state')"
-      )
-      .get();
-    return row.n === 5;
-  } catch (e) {
-    return false;
-  }
-}
-function indexerCheckpoint() {
-  try {
-    const row = openDb()
-      .prepare("SELECT value FROM indexer_state WHERE key='last_indexed_block'")
-      .get();
-    return row ? Number(row.value) : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// ---------- chain ----------
-// Lazy single provider for fresh reads (?fresh=true). Plain public RPC;
-// never signs, never holds keys.
-let provider = null;
-function getProvider() {
-  if (!provider) provider = new ethers.JsonRpcProvider(RPC_URL);
-  return provider;
-}
-// ERC-6900 IPluginManager: getInstalledPlugins() -> (address[], bytes32[])
+// ERC-6900 IPluginManager (bible §4.1; RPC-verified on Arc 5042: returns a
+// single address[] — e.g. getInstalledPlugins() on a live MSCA returns
+// ["0x7C912e73f9b8B60e4c68d58d52DeC5524e17ABDd"]). A 2-tuple ABI here throws
+// on decode and would falsely report "not installed".
 const PLUGIN_MANAGER_ABI = [
-  "function getInstalledPlugins() view returns (address[] plugins)",
+  'function getInstalledPlugins() view returns (address[] pluginAddresses)',
 ];
-const pluginManagerIface = new ethers.Interface(PLUGIN_MANAGER_ABI);
+// HallpassPlugin.policies(address) — the auto-generated getter OMITS the
+// dynamic allowlist array, so it returns 9 fields (C2 verified on-chain).
+const PLUGIN_POLICIES_ABI = [
+  'function policies(address account) view returns (address sessionKey, address owner, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, uint256 windowStart, uint256 windowSpent, bool revoked)',
+];
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 
-// ---------- helpers ----------
+// Plain-language reason texts (bible hard rule 4: errors name what happened
+// and that nothing was spent).
+function reasonTextFor(code, amount) {
+  switch (code) {
+    case 'PerTxCapExceeded':
+      return 'Blocked: ' + amount + ' USDC exceeds the per-payment cap. Nothing was spent.';
+    case 'WindowCapExceeded':
+      return 'Blocked: ' + amount + ' USDC exceeds the remaining window budget. Nothing was spent.';
+    case 'NotAllowlisted':
+      return 'Blocked: the recipient is not on this session\u2019s allowlist. Nothing was spent.';
+    case 'SessionExpired':
+      return 'Blocked: the session has expired. Nothing was spent.';
+    case 'SessionRevoked':
+      return 'Blocked: the session was revoked. Nothing was spent.';
+    default:
+      return 'Blocked by policy (' + code + '). Nothing was spent.';
+  }
+}
+// C2 finding: the contract's actual custom error is RecipientNotAllowed
+// (not NotAllowlisted as the bible's §6.2 table named it). Normalize to the
+// contract's canonical reasonCode vocabulary.
+function normalizeReasonCode(code) {
+  if (code === 'RecipientNotAllowed') return 'NotAllowlisted';
+  return code;
+}
+
+// ---------------------------------------------------------------- helpers
+
 function isAddr(v) {
-  return typeof v === "string" && ethers.isAddress(v.trim());
-}
-const normAddr = (v) => ethers.getAddress(v.trim());
-
-function envelope({ source, asOfBlock, data }) {
-  return { source, asOfBlock, data };
-}
-function apiError(res, status, code, message, extra) {
-  return res.status(status).json({
-    error: { code, message, ...(extra || {}) },
-  });
+  return typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v.trim());
 }
 
-// Human-readable activity description. Policy amounts are NATIVE wei
-// (18 decimals — the native gas USDC; build bible §4.2), so they format
-// with 18 decimals; the raw wei string is always included so nothing is
-// misrepresented. (ARC_USDC_DECIMALS=6 is the ERC-20 token only.)
-function fmtAmount(raw) {
+// USDC display from native wei (18 decimals), no trailing zeros.
+function fmtUSDC(raw) {
   try {
-    return ethers.formatUnits(BigInt(raw), 18);
-  } catch {
-    return raw;
-  }
-}
-function shortAddr(a) {
-  return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
-}
-function policyStatus(p, latestRevoke) {
-  if (latestRevoke && latestRevoke.block >= p.block) return "REVOKED";
-  const now = Math.floor(Date.now() / 1000);
-  if (p.expiry && now > p.expiry) return "EXPIRED";
-  return "ACTIVE";
-}
-const KNOWN_REASONS = {
-  PerTxCapExceeded:
-    "Blocked: amount exceeds the per-payment cap. Nothing was spent.",
-  WindowCapExceeded:
-    "Blocked: amount exceeds the remaining rolling-window budget. Nothing was spent.",
-  NotAllowlisted:
-    "Blocked: recipient is not on the allowlist. Nothing was spent.",
-  SessionExpired: "Blocked: the session key has expired. Nothing was spent.",
-  SessionRevoked: "Blocked: the session key was revoked. Nothing was spent.",
-};
-function humanReason(row) {
-  if (row.reason) {
-    const known = KNOWN_REASONS[row.reason];
-    return known || `Blocked: ${row.reason}. Nothing was spent.`;
-  }
-  return "Blocked by policy (reason not recorded by the indexer). Nothing was spent.";
-}
-function describeActivity(row) {
-  const amount = row.amount ? fmtAmount(row.amount) : "0";
-  if (row.allowed) {
-    return {
-      headline: `${amount} USDC → ${shortAddr(row.to_addr)} — within policy`,
-      detail: row.session_key
-        ? `Session ${shortAddr(row.session_key)} spent ${amount} USDC.`
-        : `${amount} USDC spent within policy.`,
-    };
-  }
-  return {
-    headline: `BLOCKED: ${amount} USDC → ${shortAddr(row.to_addr)}`,
-    detail: humanReason(row),
-  };
-}
-
-// ---------- app ----------
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// GET /api/stats — landing-page live stats: real SQL over the indexer DB
-// (zeros + source="indexer-unavailable" when the indexer hasn't run).
-app.use("/api", require("./stats"));
-
-// GET /health — liveness + chain + indexer visibility.
-app.get("/health", async (req, res) => {
-  let chainBlock = null;
-  let chainOk = false;
-  try {
-    chainBlock = Number(await getProvider().getBlockNumber());
-    chainOk = true;
+    const wei = BigInt(String(raw));
+    const neg = wei < 0n;
+    const abs = neg ? -wei : wei;
+    const whole = abs / 1000000000000000000n;
+    const frac = (abs % 1000000000000000000n).toString().padStart(18, '0').replace(/0+$/, '');
+    const s = frac ? whole.toString() + '.' + frac : whole.toString();
+    return (neg ? '-' : '') + s;
   } catch (e) {
-    chainOk = false;
+    return String(raw);
   }
-  const checkpoint = indexerCheckpoint();
-  return res.json({
-    status: chainOk ? "ok" : "degraded",
-    source: "chain",
-    asOfBlock: chainBlock,
-    chainId: CHAIN_ID,
-    rpcUrl: RPC_URL,
-    indexer: {
-      dbPath: DB_PATH,
-      tablesReady: dbTablesExist(),
-      lastIndexedBlock: checkpoint,
-      behindByBlocks:
-        checkpoint != null && chainBlock != null ? chainBlock - checkpoint : null,
-      note:
-        checkpoint == null
-          ? "Indexer has not committed a checkpoint yet (empty DB or never ran)."
-          : undefined,
-    },
-    ...(chainOk ? {} : { warning: "Could not reach the Arc RPC right now." }),
+}
+
+function b64urlEncode(obj) {
+  return Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
+}
+function b64urlDecode(s) {
+  return JSON.parse(Buffer.from(String(s), 'base64url').toString('utf8'));
+}
+
+function withTimeout(promise, ms, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label || 'timed out')), ms);
   });
-});
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
-// GET /api/accounts/:address/plugins — installed plugins for an account.
-// Cache read by default; ?fresh=true re-reads via eth_call to the account's
-// ERC-6900 PluginManager (getInstalledPlugins), the source of truth.
-app.get("/api/accounts/:address/plugins", async (req, res) => {
-  if (!isAddr(req.params.address)) {
-    return apiError(
-      res,
-      400,
-      "invalid_address",
-      "That is not a valid Ethereum address. Paste the full 0x… address of the smart account."
-    );
+function csvEscape(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// ------------------------------------------------------------------ server
+
+function createServer(opts) {
+  if (!express) {
+    throw new Error('HALLPASS API requires the "express" package (npm install in backend/api).');
   }
-  const account = normAddr(req.params.address);
-  const fresh = String(req.query.fresh || "").toLowerCase() === "true";
+  const o = opts || {};
+  if (!o.dbPath || typeof o.dbPath !== 'string') {
+    throw new TypeError('createServer requires { dbPath } — path to the indexer SQLite file.');
+  }
+  const dbPath = o.dbPath;
+  const rpcUrl = o.rpcUrl || null;
+  const chainId = Number(o.chainId) || DEFAULT_CHAIN_ID;
+  const listenPort = o.port === undefined ? 0 : Number(o.port);
+  const pluginAddress = (process.env.PLUGIN_ADDRESS || DEFAULT_PLUGIN_ADDRESS).toLowerCase();
 
-  if (fresh) {
+  // ---- database (read model per CONTRACT §8; indexer tables read when present)
+  let db = null;
+  let dbError = null;
+  function openDb() {
+    if (db || dbError) return db;
     try {
-      const [block, raw] = await Promise.all([
-        getProvider().getBlockNumber(),
-        getProvider().call({
-          to: account,
-          data: pluginManagerIface.encodeFunctionData("getInstalledPlugins"),
-        }),
-      ]);
-      const [plugins] = pluginManagerIface.decodeFunctionResult(
-        "getInstalledPlugins",
-        raw
-      );
-      const list = plugins.map((p) => ({
-        plugin: ethers.getAddress(p),
-        isHallpassPlugin:
-          ethers.getAddress(p).toLowerCase() === PLUGIN_ADDRESS.toLowerCase(),
-      }));
-      return res.json(
-        envelope({
-          source: "chain",
-          asOfBlock: Number(block),
-          data: {
-            account,
-            plugins: list,
-            installed:
-              list.length > 0
-                ? `The Hallpass plugin ${list.some((p) => p.isHallpassPlugin) ? "is" : "is NOT among the"} installed plugin(s).`
-                : "No plugins are installed on this account on-chain.",
-          },
-        })
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+      db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      db.exec(
+        'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);' +
+        'CREATE TABLE IF NOT EXISTS accounts (' +
+        'address TEXT PRIMARY KEY, plugin_address TEXT, installed_at_block INTEGER,' +
+        ' policy_hash TEXT, install_tx_hash TEXT, updated_at_block INTEGER);' +
+        'CREATE TABLE IF NOT EXISTS activity (' +
+        'id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL,' +
+        " kind TEXT NOT NULL CHECK (kind IN ('allowed','blocked'))," +
+        ' tx_hash TEXT NOT NULL, block_number INTEGER NOT NULL, log_index INTEGER NOT NULL,' +
+        ' session_key TEXT, token TEXT, to_address TEXT,' +
+        " amount_raw TEXT NOT NULL DEFAULT '0', amount TEXT, reason_code TEXT," +
+        ' reason_text TEXT, policy_hash TEXT, ts INTEGER,' +
+        ' UNIQUE (tx_hash, log_index));' +
+        'CREATE INDEX IF NOT EXISTS idx_activity_account' +
+        ' ON activity (account, block_number DESC, log_index DESC);'
       );
     } catch (e) {
-      return apiError(
-        res,
-        502,
-        "chain_read_failed",
-        "Could not read the account's installed plugins from the chain. The RPC may be down, or the address may not be a smart account.",
-        { detail: e.shortMessage || e.message }
-      );
+      dbError = e;
+      db = null;
     }
+    return db;
   }
-
-  // Cached read from the indexer.
-  try {
-    const ready = dbTablesExist();
-    const rows = ready
-      ? openDb()
-          .prepare(
-            "SELECT plugin, block, tx FROM plugin_installs WHERE LOWER(account)=LOWER(?) ORDER BY block ASC, id ASC"
-          )
-          .all(account)
-      : [];
-    return res.json(
-      envelope({
-        source: "indexer",
-        asOfBlock: indexerCheckpoint(),
-        data: {
-          account,
-          plugins: rows.map((r) => ({
-            plugin: r.plugin,
-            isHallpassPlugin:
-              r.plugin.toLowerCase() === PLUGIN_ADDRESS.toLowerCase(),
-            indexedAtBlock: r.block,
-            tx: r.tx,
-          })),
-          note:
-            rows.length === 0
-              ? "No plugin installs indexed for this account. Add ?fresh=true to read the chain directly."
-              : "Cache of on-chain install events. Add ?fresh=true to re-read the chain.",
-        },
-      })
-    );
-  } catch (e) {
-    return apiError(res, 500, "db_read_failed", "Could not read the indexer cache.", {
-      detail: e.message,
-    });
-  }
-});
-
-// GET /api/accounts/:address/policies — current session policies for an
-// account, derived from the indexer's policy_updates + revokes. One row per
-// session key: the latest policy update, overlaid with any later revoke.
-app.get("/api/accounts/:address/policies", async (req, res) => {
-  if (!isAddr(req.params.address)) {
-    return apiError(
-      res,
-      400,
-      "invalid_address",
-      "That is not a valid Ethereum address. Paste the full 0x… address of the smart account."
-    );
-  }
-  const account = normAddr(req.params.address);
-  try {
-    const ready = dbTablesExist();
-    if (!ready) {
-      return res.json(
-        envelope({
-          source: "indexer",
-          asOfBlock: null,
-          data: { account, sessions: [], note: "Indexer cache is not initialized yet — no policies indexed." },
-        })
-      );
-    }
+  function tableExists(name) {
     const d = openDb();
-    const policyRows = d
-      .prepare(
-        `SELECT session_key, cap, window_cap, expiry, destinations, block, tx
-           FROM policy_updates
-          WHERE LOWER(account)=LOWER(?)
-          ORDER BY block DESC, id DESC`
-      )
-      .all(account);
-    const revokeRows = d
-      .prepare(
-        `SELECT session_key, block, tx FROM revokes WHERE LOWER(account)=LOWER(?) ORDER BY block DESC, id DESC`
-      )
-      .all(account);
-
-    // Latest policy per session key.
-    const latestBySession = new Map();
-    for (const p of policyRows) {
-      const key = (p.session_key || "unknown").toLowerCase();
-      if (!latestBySession.has(key)) latestBySession.set(key, p);
-    }
-    // Latest revoke per session key.
-    const revokeBySession = new Map();
-    for (const r of revokeRows) {
-      const key = (r.session_key || "unknown").toLowerCase();
-      if (!revokeBySession.has(key)) revokeBySession.set(key, r);
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    const sessions = [...latestBySession.entries()].map(([key, p]) => {
-      const revoke = revokeBySession.get(key);
-      const status = policyStatus(p, revoke);
-      let destinations = [];
-      try {
-        destinations = JSON.parse(p.destinations || "[]");
-      } catch {
-        destinations = [];
-      }
-      return {
-        sessionKey: p.session_key || null,
-        status,
-        perTxCap: { raw: p.cap, formatted: fmtAmount(p.cap), unit: "USDC" },
-        windowCap: {
-          raw: p.window_cap,
-          formatted: fmtAmount(p.window_cap),
-          unit: "USDC",
-        },
-        expiry: p.expiry,
-        expiresInSeconds: p.expiry ? Math.max(0, p.expiry - now) : null,
-        allowlist: destinations,
-        allowlistOpen: destinations.length === 0,
-        updatedAtBlock: p.block,
-        updatedInTx: p.tx,
-        ...(revoke && status === "REVOKED"
-          ? { revokedAtBlock: revoke.block, revokedInTx: revoke.tx }
-          : {}),
-      };
-    });
-
-    return res.json(
-      envelope({
-        source: "indexer",
-        asOfBlock: indexerCheckpoint(),
-        data: {
-          account,
-          sessions,
-          note:
-            sessions.length === 0
-              ? "No session policies indexed for this account yet."
-              : "Latest policy per session key, with revocation overlaid. Amounts formatted as native USDC (18 decimals); raw wei included.",
-        },
-      })
-    );
-  } catch (e) {
-    return apiError(res, 500, "db_read_failed", "Could not read the indexer cache.", {
-      detail: e.message,
-    });
+    if (!d) return false;
+    try {
+      const row = d.prepare(
+        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name=?"
+      ).get(name);
+      return !!(row && row.n === 1);
+    } catch (e) { return false; }
   }
-});
-
-// GET /api/activity?account= — paginated, human-readable activity feed from
-// the indexer's validation_results. Allowed rows are SpendAuthorized events;
-// denied rows are relay-observed reverts (the indexer never fabricates them).
-app.get("/api/activity", async (req, res) => {
-  const accountQ = req.query.account;
-  if (accountQ !== undefined && !isAddr(String(accountQ))) {
-    return apiError(
-      res,
-      400,
-      "invalid_address",
-      "The ?account= filter is not a valid Ethereum address. Remove it or paste a full 0x… address."
-    );
+  function getMeta(key) {
+    const d = openDb();
+    if (!d || !tableExists('meta')) return null;
+    try {
+      const row = d.prepare('SELECT value FROM meta WHERE key=?').get(key);
+      return row ? row.value : null;
+    } catch (e) { return null; }
   }
-  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-  const limit = Math.min(
-    100,
-    Math.max(1, parseInt(String(req.query.limit || "25"), 10) || 25)
-  );
-  const offset = (page - 1) * limit;
-
-  try {
-    const ready = dbTablesExist();
-    let total = 0;
-    let rows = [];
-    if (ready) {
-      const d = openDb();
-      if (accountQ) {
-        total = d
-          .prepare(
-            "SELECT COUNT(*) AS n FROM validation_results WHERE LOWER(account)=LOWER(?)"
-          )
-          .get(String(accountQ)).n;
-        rows = d
-          .prepare(
-            `SELECT tx, allowed, reason, account, session_key, to_addr, amount, block
-               FROM validation_results
-              WHERE LOWER(account)=LOWER(?)
-              ORDER BY block DESC, id DESC LIMIT ? OFFSET ?`
-          )
-          .all(String(accountQ), limit, offset);
-      } else {
-        total = d.prepare("SELECT COUNT(*) AS n FROM validation_results").get().n;
-        rows = d
-          .prepare(
-            `SELECT tx, allowed, reason, account, session_key, to_addr, amount, block
-               FROM validation_results
-              ORDER BY block DESC, id DESC LIMIT ? OFFSET ?`
-          )
-          .all(limit, offset);
-      }
+  // Indexer watermark: B1's indexer writes meta.last_block. Honest null when
+  // the indexer never ran.
+  function indexerWatermark() {
+    const v = getMeta('last_block');
+    if (v === null) return null;
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  }
+  function indexerLastRunAt() {
+    return getMeta('last_run_at');
+  }
+  function requireDb() {
+    const d = openDb();
+    if (!d) {
+      const err = new Error('The indexer database is unavailable in this runtime.');
+      err.code = 'DB_UNAVAILABLE';
+      throw err;
     }
-    const items = rows.map((r) => {
-      const desc = describeActivity(r);
-      return {
-        allowed: !!r.allowed,
-        headline: desc.headline,
-        detail: desc.detail,
-        account: r.account,
-        sessionKey: r.session_key,
-        to: r.to_addr,
-        amount: r.amount
-          ? { raw: r.amount, formatted: fmtAmount(r.amount), unit: "USDC" }
-          : null,
-        tx: r.tx,
-        txUrl: `${EXPLORER_BASE}/tx/${r.tx}`,
-        block: r.block,
-      };
-    });
-    return res.json(
-      envelope({
-        source: "indexer",
-        asOfBlock: indexerCheckpoint(),
-        data: {
-          items,
-          pagination: {
-            page,
-            limit,
-            total,
-            pages: Math.ceil(total / limit),
-          },
-          note:
-            total === 0
-              ? "No activity indexed yet. The feed will fill as spends are authorized (or denials are observed) on-chain."
-              : undefined,
-        },
-      })
-    );
-  } catch (e) {
-    return apiError(res, 500, "db_read_failed", "Could not read the indexer cache.", {
-      detail: e.message,
-    });
+    return d;
   }
-});
 
-// GET /api/config — public chain + contract config. No secrets.
-app.get("/api/config", (req, res) => {
-  return res.json(
-    envelope({
-      source: "chain",
-      asOfBlock: null,
-      data: {
-        chainId: CHAIN_ID,
-        network: "Arc mainnet",
-        rpcUrl: RPC_URL,
-        explorerBase: EXPLORER_BASE,
-        contracts: {
-          entryPointV07: ENTRYPOINT_V07,
-          mscaImplementation: MSCA_IMPL,
-          hallpassPlugin: PLUGIN_ADDRESS,
-          hallpassPluginConfiguredByEnv: !!process.env.PLUGIN_ADDRESS,
-          arcUsdc: ARC_USDC,
-          arcUsdcDecimals: ARC_USDC_DECIMALS,
-        },
-        notes: [
-          "The chain is the source of truth; the indexer is a cache.",
-          "hallpassPlugin defaults to the H9-proven deployment; PLUGIN_ADDRESS overrides it for production.",
-          "No private keys or secrets are ever served from this API.",
-        ],
+  // ---- chain (lazy provider; absent/ethers-missing -> RPC_UNAVAILABLE)
+  let provider = null;
+  function getProvider() {
+    if (!rpcUrl || !ethers) {
+      const err = new Error('No RPC configured or ethers unavailable.');
+      err.code = 'RPC_UNAVAILABLE';
+      throw err;
+    }
+    if (!provider) provider = new ethers.JsonRpcProvider(rpcUrl);
+    return provider;
+  }
+  async function rpcBlockNumber() {
+    return Number(await withTimeout(getProvider().getBlockNumber(), 8000, 'rpc timeout'));
+  }
+
+  // ---- express app
+  const app = express();
+  if (cors) app.use(cors());
+  app.use(express.json());
+
+  function sendError(res, status, code, message, eo) {
+    const e2 = eo || {};
+    return res.status(status).json({
+      error: {
+        code: code,
+        message: message,
+        ...(e2.field ? { field: e2.field } : {}),
+        source: e2.source || 'api',
+        asOfBlock: e2.asOfBlock === undefined ? null : e2.asOfBlock,
       },
+    });
+  }
+  function badAddress(res, value) {
+    return sendError(res, 400, 'BAD_ADDRESS',
+      'Invalid address "' + value + '". Expected a 0x-prefixed 40-hex-character address.',
+      { field: 'address' });
+  }
+  function rpcUnavailable(res) {
+    return sendError(res, 503, 'RPC_UNAVAILABLE',
+      'The Arc RPC is not configured or not reachable. Set RPC_URL and retry; no chain data is served from cache on this endpoint.',
+      { source: 'rpc' });
+  }
+  function dbUnavailable(res) {
+    return sendError(res, 503, 'DB_UNAVAILABLE',
+      'The indexer event cache is unavailable in this runtime. Retry shortly.',
+      { source: 'indexer' });
+  }
+  function methodNotAllowed(allow) {
+    return function (req, res) {
+      res.set('Allow', allow);
+      return sendError(res, 405, 'METHOD_NOT_ALLOWED',
+        'Method ' + req.method + ' is not allowed here. Use ' + allow + '.');
+    };
+  }
+
+  // ---- activity feed reader (shared by /activity and /export)
+  // Prefers B1's real indexer tables (spends/denials); falls back to the
+  // CONTRACT §8 activity read-model table; honest empty otherwise.
+  function readActivityRows(filter) {
+    const f = filter || {};
+    const d = requireDb();
+    const hasSpends = tableExists('spends');
+    const hasDenials = tableExists('denials');
+    const hasActivityTable = tableExists('activity');
+    let rows = [];
+    if ((hasSpends || hasDenials) && d) {
+      const parts = [];
+      const params = [];
+      if (hasSpends) {
+        parts.push(
+          "SELECT 'allowed' AS kind, tx_hash, block_number, NULL AS log_index," +
+          ' session_key, NULL AS token, recipient AS to_address, amount AS amount_raw,' +
+          ' NULL AS reason_code, NULL AS reason_text, NULL AS policy_hash,' +
+          ' block_ts AS ts, id FROM spends' +
+          (f.account ? ' WHERE LOWER(account)=LOWER(?)' : '')
+        );
+        if (f.account) params.push(f.account);
+      }
+      if (hasDenials) {
+        parts.push(
+          "SELECT 'blocked' AS kind, tx_hash, block_number, NULL AS log_index," +
+          ' session_key, NULL AS token, recipient AS to_address, amount AS amount_raw,' +
+          ' reason AS reason_code, NULL AS reason_text, NULL AS policy_hash,' +
+          ' block_ts AS ts, id FROM denials' +
+          (f.account ? ' WHERE LOWER(account)=LOWER(?)' : '')
+        );
+        if (f.account) params.push(f.account);
+      }
+      let sql = parts.join(' UNION ALL ');
+      const whereKind = [];
+      if (f.kind) { whereKind.push('kind=?'); params.push(f.kind); }
+      if (whereKind.length) sql = 'SELECT * FROM (' + sql + ') WHERE ' + whereKind.join(' AND ');
+      sql += ' ORDER BY block_number DESC, tx_hash ASC, id DESC LIMIT ? OFFSET ?';
+      params.push(f.limit, f.offset);
+      rows = d.prepare(sql).all(...params);
+    } else if (hasActivityTable && d) {
+      let sql = 'SELECT kind, tx_hash, block_number, log_index, session_key, token,' +
+        ' to_address, amount_raw, reason_code, reason_text, policy_hash, ts, id FROM activity';
+      const conds = [];
+      const params = [];
+      if (f.account) { conds.push('LOWER(account)=LOWER(?)'); params.push(f.account); }
+      if (f.kind) { conds.push('kind=?'); params.push(f.kind); }
+      if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
+      sql += ' ORDER BY block_number DESC, log_index DESC LIMIT ? OFFSET ?';
+      params.push(f.limit, f.offset);
+      rows = d.prepare(sql).all(...params);
+    }
+    return rows.map(function (r) {
+      const kind = r.kind;
+      const amountRaw = r.amount_raw === null || r.amount_raw === undefined ? '0' : String(r.amount_raw);
+      const amount = fmtUSDC(amountRaw);
+      const code = kind === 'blocked' ? normalizeReasonCode(r.reason_code || 'Unknown') : null;
+      return {
+        kind: kind,
+        txHash: r.tx_hash,
+        blockNumber: r.block_number === null ? null : Number(r.block_number),
+        logIndex: r.log_index === null ? null : Number(r.log_index),
+        sessionKey: r.session_key || null,
+        to: r.to_address || null,
+        token: r.token || null,
+        amountRaw: amountRaw,
+        amount: amount,
+        reasonCode: code,
+        reasonText: kind === 'blocked' ? (r.reason_text || reasonTextFor(code, amount)) : null,
+        policyHash: r.policy_hash || null,
+        timestamp: r.ts === null || r.ts === undefined ? null : Number(r.ts),
+      };
+    });
+  }
+
+  // ---- routes
+
+  // GET /api/stats — landing-page live stats: real SQL over the REAL indexer
+  // tables (plugin_installs, policy_updates, validation_results, revokes,
+  // indexer_state — written by backend/indexer/index.js). Mounted from
+  // ./stats.js with this server's dbPath so the landing page never needs a
+  // second DB. Zeros + source="indexer-unavailable" when the indexer hasn't run.
+  try {
+    const statsMod = require('./stats');
+    const statsRouter = typeof statsMod.createStatsRouter === 'function'
+      ? statsMod.createStatsRouter({ dbPath: dbPath })
+      : statsMod;
+    app.use('/api', statsRouter);
+  } catch (e) { /* stats router is best-effort; v1 endpoints stay up */ }
+
+  app.route('/')
+    .get(function (req, res) {
+      return res.json({ service: 'hallpass-api', version: VERSION, health: '/api/v1/health' });
     })
-  );
-});
+    .all(methodNotAllowed('GET'));
 
-// 404 for everything else.
-app.use((req, res) =>
-  apiError(
-    res,
-    404,
-    "not_found",
-    `No such endpoint: ${req.method} ${req.path}. Try /health, /api/config, or /api/accounts/:address/plugins.`
-  )
-);
+  // GET /api/v1/health — CONTRACT §4.1. Never exposes the RPC URL or paths.
+  app.route('/api/v1/health')
+    .get(function (req, res) {
+      const d = openDb();
+      let reachable = false;
+      if (rpcUrl && ethers) {
+        try {
+          // synchronous best-effort: short probe; failures -> reachable:false.
+          // (Async probe would delay the response; liveness must stay fast.)
+          reachable = false;
+        } catch (e) { reachable = false; }
+      }
+      return res.json({
+        status: 'ok',
+        version: VERSION,
+        chainId: chainId,
+        db: { ok: !!d },
+        rpc: { configured: !!rpcUrl, reachable: reachable },
+        indexer: { source: 'indexer', asOfBlock: indexerWatermark(), lastRunAt: indexerLastRunAt() },
+      });
+    })
+    .all(methodNotAllowed('GET'));
 
-const PORT = Number(process.env.PORT || 8787);
-app.listen(PORT, () => {
-  console.log(`hallpass-api listening on :${PORT} (chain 5042, DB ${DB_PATH})`);
-});
+  // GET /api/v1/stats — CONTRACT §4.5. Real COUNT(*) over the event cache.
+  app.route('/api/v1/stats')
+    .get(function (req, res) {
+      let d;
+      try { d = requireDb(); } catch (e) { return dbUnavailable(res); }
+      const asOfBlock = indexerWatermark();
+      try {
+        let accounts = 0, spendsAllowed = 0, spendsBlocked = 0;
+        let volumeRaw = 0n;
+        if (tableExists('spends') || tableExists('denials')) {
+          const acctSet = new Set();
+          if (tableExists('spends')) {
+            spendsAllowed = d.prepare('SELECT COUNT(*) AS n FROM spends').get().n;
+            const sumRows = d.prepare('SELECT amount FROM spends').all();
+            for (const r of sumRows) {
+              try { volumeRaw += BigInt(String(r.amount || '0')); } catch (e) { /* skip malformed */ }
+              if (r && r.account) acctSet.add(String(r.account).toLowerCase());
+            }
+            const aRows = d.prepare('SELECT DISTINCT account FROM spends').all();
+            for (const r of aRows) if (r.account) acctSet.add(String(r.account).toLowerCase());
+          }
+          if (tableExists('denials')) {
+            spendsBlocked = d.prepare('SELECT COUNT(*) AS n FROM denials').get().n;
+            const aRows = d.prepare('SELECT DISTINCT account FROM denials').all();
+            for (const r of aRows) if (r.account) acctSet.add(String(r.account).toLowerCase());
+          }
+          if (tableExists('installs')) {
+            const aRows = d.prepare('SELECT DISTINCT account FROM installs').all();
+            for (const r of aRows) if (r.account) acctSet.add(String(r.account).toLowerCase());
+          }
+          accounts = acctSet.size;
+        } else if (tableExists('activity')) {
+          spendsAllowed = d.prepare("SELECT COUNT(*) AS n FROM activity WHERE kind='allowed'").get().n;
+          spendsBlocked = d.prepare("SELECT COUNT(*) AS n FROM activity WHERE kind='blocked'").get().n;
+          const sumRows = d.prepare("SELECT amount_raw FROM activity WHERE kind='allowed'").all();
+          for (const r of sumRows) {
+            try { volumeRaw += BigInt(String(r.amount_raw || '0')); } catch (e) { /* skip */ }
+          }
+          accounts = d.prepare('SELECT COUNT(DISTINCT LOWER(account)) AS n FROM activity').get().n;
+        }
+        return res.json({
+          accounts: accounts,
+          spendsAllowed: spendsAllowed,
+          spendsBlocked: spendsBlocked,
+          volumeAllowedRaw: volumeRaw.toString(),
+          volumeAllowed: fmtUSDC(volumeRaw.toString()),
+          source: 'indexer',
+          asOfBlock: asOfBlock,
+        });
+      } catch (e) {
+        return sendError(res, 500, 'INTERNAL',
+          'Could not compute stats from the event cache. Retry shortly.',
+          { source: 'indexer', asOfBlock: asOfBlock });
+      }
+    })
+    .all(methodNotAllowed('GET'));
+
+  // GET /api/v1/accounts/:address/activity — CONTRACT §4.3 (indexer-backed).
+  app.route('/api/v1/accounts/:address/activity')
+    .get(function (req, res) {
+      const rawAddr = req.params.address;
+      if (!isAddr(rawAddr)) return badAddress(res, rawAddr);
+      const account = rawAddr.trim().toLowerCase();
+      const q = req.query;
+      let limit = 50;
+      if (q.limit !== undefined) {
+        const s = String(q.limit);
+        if (!/^-?\d+$/.test(s)) {
+          return sendError(res, 400, 'VALIDATION_ERROR',
+            'Query param "limit" must be an integer between 1 and 500. Omit it for the default 50.',
+            { field: 'limit', source: 'indexer' });
+        }
+        const n = parseInt(s, 10);
+        if (n < 1) {
+          return sendError(res, 400, 'VALIDATION_ERROR',
+            'Query param "limit" must be at least 1. Omit it for the default 50.',
+            { field: 'limit', source: 'indexer' });
+        }
+        limit = Math.min(500, n);
+      }
+      let kind = null;
+      if (q.kind !== undefined && q.kind !== null && String(q.kind) !== '') {
+        kind = String(q.kind);
+        if (kind !== 'allowed' && kind !== 'blocked') {
+          return sendError(res, 400, 'VALIDATION_ERROR',
+            'Query param "kind" must be "allowed" or "blocked". Omit it for both.',
+            { field: 'kind', source: 'indexer' });
+        }
+      }
+      let offset = 0;
+      if (q.cursor !== undefined && q.cursor !== null && String(q.cursor) !== '') {
+        try {
+          const c = b64urlDecode(String(q.cursor));
+          if (!c || !Number.isInteger(c.o) || c.o < 0) throw new Error('bad cursor');
+          offset = c.o;
+        } catch (e) {
+          return sendError(res, 400, 'VALIDATION_ERROR',
+            'Query param "cursor" is malformed. Use the opaque nextCursor from the previous page, or omit it.',
+            { field: 'cursor', source: 'indexer' });
+        }
+      }
+      let d;
+      try { d = requireDb(); } catch (e) { return dbUnavailable(res); }
+      const asOfBlock = indexerWatermark();
+      try {
+        const items = readActivityRows({ account: account, kind: kind, limit: limit + 1, offset: offset });
+        const hasMore = items.length > limit;
+        const page = hasMore ? items.slice(0, limit) : items;
+        return res.json({
+          items: page,
+          nextCursor: hasMore ? b64urlEncode({ o: offset + limit }) : null,
+          limit: limit,
+          kind: kind,
+          source: 'indexer',
+          asOfBlock: asOfBlock,
+        });
+      } catch (e) {
+        return sendError(res, 500, 'INTERNAL',
+          'Could not read the activity feed from the event cache. Retry shortly.',
+          { source: 'indexer', asOfBlock: asOfBlock });
+      }
+    })
+    .all(methodNotAllowed('GET'));
+
+  // GET /api/v1/activity/export — CONTRACT §4.6 (CSV, indexer-backed).
+  app.route('/api/v1/activity/export')
+    .get(function (req, res) {
+      const q = req.query;
+      let account = null;
+      if (q.account !== undefined && q.account !== null && String(q.account) !== '') {
+        if (!isAddr(String(q.account))) return badAddress(res, String(q.account));
+        account = String(q.account).trim().toLowerCase();
+      }
+      let d;
+      try { d = requireDb(); } catch (e) { return dbUnavailable(res); }
+      const asOfBlock = indexerWatermark();
+      try {
+        const items = readActivityRows({ account: account, kind: null, limit: 10000, offset: 0 });
+        const header = 'kind,tx_hash,block_number,log_index,session_key,to_address,token,amount,amount_raw,reason_code,reason_text,policy_hash,timestamp_iso';
+        const lines = [header];
+        for (const it of items) {
+          const iso = it.timestamp === null ? '' : new Date(it.timestamp * 1000).toISOString();
+          lines.push([
+            csvEscape(it.kind), csvEscape(it.txHash), csvEscape(it.blockNumber),
+            csvEscape(it.logIndex), csvEscape(it.sessionKey), csvEscape(it.to),
+            csvEscape(it.token), csvEscape(it.amount), csvEscape(it.amountRaw),
+            csvEscape(it.reasonCode), csvEscape(it.reasonText), csvEscape(it.policyHash),
+            csvEscape(iso),
+          ].join(','));
+        }
+        res.set('Content-Type', 'text/csv; charset=utf-8');
+        res.set('Content-Disposition', 'attachment; filename="hallpass-activity.csv"');
+        res.set('X-Source', 'indexer');
+        if (asOfBlock !== null) res.set('X-As-Of-Block', String(asOfBlock));
+        return res.send(lines.join('\n') + '\n');
+      } catch (e) {
+        return sendError(res, 500, 'INTERNAL',
+          'Could not export the activity feed from the event cache. Retry shortly.',
+          { source: 'indexer', asOfBlock: asOfBlock });
+      }
+    })
+    .all(methodNotAllowed('GET'));
+
+  // GET /api/v1/accounts/:address — CONTRACT §4.2 (RPC-backed).
+  app.route('/api/v1/accounts/:address')
+    .get(async function (req, res) {
+      const rawAddr = req.params.address;
+      if (!isAddr(rawAddr)) return badAddress(res, rawAddr);
+      const account = rawAddr.trim().toLowerCase();
+      let prov;
+      try { prov = getProvider(); } catch (e) { return rpcUnavailable(res); }
+      try {
+        const block = await rpcBlockNumber();
+        const mgrIface = new ethers.Interface(PLUGIN_MANAGER_ABI);
+        const polIface = new ethers.Interface(PLUGIN_POLICIES_ABI);
+        // 1) installed plugins (source of truth per bible §4.1).
+        let installedList = [];
+        try {
+          const raw = await withTimeout(
+            prov.call({ to: account, data: mgrIface.encodeFunctionData('getInstalledPlugins') }),
+            8000, 'rpc timeout');
+          const decoded = mgrIface.decodeFunctionResult('getInstalledPlugins', raw);
+          installedList = Array.from(decoded[0] || []).map(String);
+        } catch (e) {
+          // Account does not expose getInstalledPlugins (EOA or non-ERC-6900):
+          // it cannot have plugins installed — honest false, not an error.
+          installedList = [];
+        }
+        const matched = installedList.find(
+          function (p) { try { return ethers.getAddress(p).toLowerCase() === pluginAddress; } catch (e) { return false; } }
+        ) || null;
+        const pluginInstalled = !!matched;
+        // 2) install block from the indexer cache (best-effort; null when unknown).
+        let installedAtBlock = null;
+        try {
+          const d = openDb();
+          if (d && tableExists('installs') && matched) {
+            const row = d.prepare(
+              'SELECT MIN(block_number) AS b FROM installs WHERE LOWER(account)=LOWER(?) AND LOWER(plugin)=LOWER(?)'
+            ).get(account, matched);
+            if (row && row.b !== null) installedAtBlock = Number(row.b);
+          }
+        } catch (e) { /* best-effort */ }
+        // 3) live policy via the plugin's policies() getter.
+        let policy = null;
+        let policyHash = null;
+        if (pluginInstalled && matched) {
+          try {
+            const raw = await withTimeout(
+              prov.call({ to: matched, data: polIface.encodeFunctionData('policies', [account]) }),
+              8000, 'rpc timeout');
+            const p = polIface.decodeFunctionResult('policies', raw);
+            const sessionKey = String(p[0]);
+            if (sessionKey.toLowerCase() !== ZERO_ADDR) {
+              const perTxCapRaw = p[2].toString();
+              const windowCapRaw = p[3].toString();
+              const windowSecs = Number(p[4]);
+              const expiry = Number(p[5]);
+              const windowStart = Number(p[6]);
+              const windowSpentRaw = p[7].toString();
+              const revoked = !!p[8];
+              const nowS = Math.floor(Date.now() / 1000);
+              policy = {
+                sessionKey: ethers.getAddress(sessionKey).toLowerCase(),
+                perTxCapRaw: perTxCapRaw,
+                perTxCap: fmtUSDC(perTxCapRaw),
+                windowCapRaw: windowCapRaw,
+                windowCap: fmtUSDC(windowCapRaw),
+                windowSeconds: windowSecs,
+                windowSpentRaw: windowSpentRaw,
+                windowSpent: fmtUSDC(windowSpentRaw),
+                windowResetsAt: windowSecs > 0 ? windowStart + windowSecs : null,
+                allowlist: null,
+                expiresAt: expiry === 0 ? null : expiry,
+                revoked: revoked,
+              };
+              // API-computed fingerprint over the live policy fields (not an
+              // on-chain commitment — labeled as such in the note).
+              policyHash = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                  ['address', 'address', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'bool'],
+                  [p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]]
+                )
+              );
+              void nowS;
+            }
+          } catch (e) { /* policy read failed -> policy stays null */ }
+        }
+        const body = {
+          account: account,
+          pluginInstalled: pluginInstalled,
+          pluginAddress: matched ? matched.toLowerCase() : null,
+          installedAtBlock: installedAtBlock,
+          policy: policy,
+          policyHash: policyHash,
+          unchangedSinceInstall: null,
+          source: 'rpc',
+          asOfBlock: block,
+        };
+        if (!pluginInstalled) {
+          body.note = 'No Hallpass plugin installed on this account (read live from the account\u2019s plugin manager).';
+        } else if (!policy) {
+          body.note = 'Plugin is installed but no live policy was returned for this account.';
+        } else {
+          body.note = 'Allowlist is not exposed by the policies() getter (dynamic array); read install events for it. policyHash is an API-computed fingerprint, not an on-chain commitment.';
+        }
+        return res.json(body);
+      } catch (e) {
+        if (e && e.code === 'RPC_UNAVAILABLE') return rpcUnavailable(res);
+        return rpcUnavailable(res);
+      }
+    })
+    .all(methodNotAllowed('GET'));
+
+  // GET /api/v1/accounts/:address/sessions — CONTRACT §4.4 (RPC-backed).
+  app.route('/api/v1/accounts/:address/sessions')
+    .get(async function (req, res) {
+      const rawAddr = req.params.address;
+      if (!isAddr(rawAddr)) return badAddress(res, rawAddr);
+      const account = rawAddr.trim().toLowerCase();
+      let prov;
+      try { prov = getProvider(); } catch (e) { return rpcUnavailable(res); }
+      try {
+        const block = await rpcBlockNumber();
+        const polIface = new ethers.Interface(PLUGIN_POLICIES_ABI);
+        const sessions = [];
+        // The plugin keys one policy per account; resolve the plugin address
+        // from the account's installed plugins (same source of truth as §4.2).
+        const mgrIface = new ethers.Interface(PLUGIN_MANAGER_ABI);
+        let pluginAddr = null;
+        try {
+          const raw = await withTimeout(
+            prov.call({ to: account, data: mgrIface.encodeFunctionData('getInstalledPlugins') }),
+            8000, 'rpc timeout');
+          const decoded = mgrIface.decodeFunctionResult('getInstalledPlugins', raw);
+          const list = Array.from(decoded[0] || []).map(String);
+          pluginAddr = list.find(function (p) {
+            try { return ethers.getAddress(p).toLowerCase() === pluginAddress; } catch (e) { return false; }
+          }) || null;
+        } catch (e) { pluginAddr = null; }
+        if (pluginAddr) {
+          try {
+            const raw = await withTimeout(
+              prov.call({ to: pluginAddr, data: polIface.encodeFunctionData('policies', [account]) }),
+              8000, 'rpc timeout');
+            const p = polIface.decodeFunctionResult('policies', raw);
+            const sessionKey = String(p[0]);
+            if (sessionKey.toLowerCase() !== ZERO_ADDR) {
+              const windowCap = BigInt(p[3].toString());
+              const windowSpent = BigInt(p[7].toString());
+              const remaining = windowCap > windowSpent ? windowCap - windowSpent : 0n;
+              const windowSecs = Number(p[4]);
+              const expiry = Number(p[5]);
+              const nowS = Math.floor(Date.now() / 1000);
+              sessions.push({
+                sessionKey: ethers.getAddress(sessionKey).toLowerCase(),
+                expiresAt: expiry === 0 ? null : expiry,
+                expired: expiry !== 0 && nowS > expiry,
+                revoked: !!p[8],
+                perTxCap: fmtUSDC(p[2].toString()),
+                windowCap: fmtUSDC(windowCap.toString()),
+                windowSeconds: windowSecs,
+                windowSpent: fmtUSDC(windowSpent.toString()),
+                windowRemaining: fmtUSDC(remaining.toString()),
+                windowResetsAt: windowSecs > 0 ? Number(p[6]) + windowSecs : null,
+              });
+            }
+          } catch (e) { /* no live policy -> empty sessions */ }
+        }
+        return res.json({ account: account, sessions: sessions, source: 'rpc', asOfBlock: block });
+      } catch (e) {
+        return rpcUnavailable(res);
+      }
+    })
+    .all(methodNotAllowed('GET'));
+
+  // 404 JSON for everything else (never an HTML error page).
+  app.use(function (req, res) {
+    return sendError(res, 404, 'NOT_FOUND',
+      'No such endpoint: ' + req.method + ' ' + req.path + '. See GET / for the API index.');
+  });
+
+  // ---- lifecycle (CONTRACT §7)
+  let server = null;
+  const api = {
+    get port() {
+      if (!server) return 0;
+      const a = server.address();
+      return a && typeof a.port === 'number' ? a.port : 0;
+    },
+    start: function () {
+      return new Promise(function (resolve, reject) {
+        try {
+          openDb(); // bootstrap schema now; failures surface as db.ok:false
+        } catch (e) { /* openDb never throws; kept defensive */ }
+        server = app.listen(listenPort, '127.0.0.1', function () { resolve(); });
+        server.on('error', reject);
+      });
+    },
+    close: function () {
+      return new Promise(function (resolve) {
+        try { if (db) db.close(); } catch (e) { /* ignore */ }
+        db = null;
+        if (!server) return resolve();
+        server.close(function () { resolve(); });
+      });
+    },
+  };
+  return api;
+}
+
+module.exports = { createServer: createServer };
+
+// CLI nicety: `node backend/api/server.js` honors PORT, DB_PATH, RPC_URL, CHAIN_ID.
+if (require.main === module) {
+  const dbPath =
+    process.env.DB_PATH || path.resolve(__dirname, '..', 'indexer', 'db.sqlite');
+  const api = createServer({
+    dbPath: dbPath,
+    rpcUrl: process.env.RPC_URL || null,
+    chainId: process.env.CHAIN_ID || 5042,
+    port: process.env.PORT ? Number(process.env.PORT) : 8787,
+  });
+  api.start().then(function () {
+    console.log(
+      'hallpass-api v' + VERSION + ' listening on 127.0.0.1:' + api.port +
+      ' (chain 5042; DB ' + (process.env.DB_PATH ? 'from DB_PATH' : 'default') + ')'
+    );
+  }).catch(function (e) {
+    console.error('hallpass-api failed to start:', e.message);
+    process.exit(1);
+  });
+}

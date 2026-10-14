@@ -78,21 +78,29 @@ These are not product proofs — they are the live addresses the build and any j
 | Native gas token | USDC, 18 decimals for gas accounting | One balance funds spend + gas |
 | Arc base fee | pinned at **20 gwei** (sampled across blocks; txs paid 20–40 gwei) | Deploy gas limit **≥ 2.2M** — a 1.5M limit caused a real out-of-gas failure (F1, [0x2a461682a4639ab5c20a58a204a5e9c849309880a92f958ae0d1b83e60e7dfec](https://explorer.arc.io/tx/0x2a461682a4639ab5c20a58a204a5e9c849309880a92f958ae0d1b83e60e7dfec), 0.036 USDC burned) |
 
-### 2.5 Production build (build phase, `~/workspace/hallpass-build/`) — SPECIFIED, pending build
+### 2.5 Production build (build phase, `~/workspace/hallpass-build/`) — MIXED (see honesty section)
 
-The H9 proofs above demonstrate every **mechanism** on mainnet. The production build — a clean-rewritten `HallpassPlugin` (malleability fix, `used`-flag SSTORE), the hooks-only plugin, the SigGate-style 1271 module, and the dashboard — is still being built. Each row below must be re-executed against the production contracts with tx hashes recorded before it can claim PROVEN. **No hash is invented or anticipated here.**
+| # | Test point | Evidence | Status |
+|---|---|---|---|
+| 25 | Malleability-constant fix in repo source | Coordinator-fixed `0x7FFF…B20A0`; C2 behavioral probe test passes on fixed source and FAILS on pre-fix source (extracts the typo byte-for-byte) | **PROVEN (unit)** |
+| 26 | Unit suite | `forge test` — 27/27 green (`contracts/test/HallpassPlugin.t.sol`) | **PROVEN** |
+| 27 | Fork suite (Arc mainnet) | `forge test --fork-url` — 19/19 green (`contracts/test/HallpassFork.t.sol`) | **PROVEN** |
+| 28 | Backend API contract | `node --test backend/api/` — 32/32 green against `CONTRACT.md` v1.0.0 | **PROVEN** |
+| 29 | Fresh install→enforce→revoke dust E2E (build phase, 2026-10-14) | `QA/dust-e2e-report.md` — install `0x18d20d1f36645456b8614544c0b3a6237639ae150b6ab9e842c32e8c1c402ca0`; in-policy `0x9020636267e33400df6639d79d3a18bc7389f6152cb505039c49594f8e555953`; over-cap revert `PerTxCapExceeded(0.05,0.01)` `0x9fdc48e5a47d12ec08eeccbd8dccae3441d03de7e544b5f46d29124cefa074bf`; revoke `0xe1bf2980e4fdb2ff7ed4a2e9f6d308a9a191c4ce8ff499552ed9316a64d9f291`; post-revoke revert `SessionRevoked()` `0xb51c29dadc8e91a167ebecef2bbe5a550deae8b4976cff69b9869fe403d72f11` | **PROVEN on mainnet** |
+| 30 | Production plugin deploy (fixed binary) + Sourcify exact_match | Not done — founder's step (`contracts/DEPLOYMENT.md`) | SPECIFIED |
+| 31 | Dashboard stranger test on mainnet | Built, gates green; live userOp flow not yet executed through the UI | SPECIFIED |
+
+### 2.6 Bytecode honesty — which binary the proofs ran against
+
+- The build-phase dust E2E (§2.5 row 29) ran against `0x7C912e73f9b8B60e4c68d58d52DeC5524e17ABDd`, which `cast code` inspection shows was built from **pre-fix source** (contains the typo'd malleability constant). Enforcement (caps, window, revoke) is byte-identical between pre- and post-fix; the fix only changes the typed-data bound, which is proven by the unit probe (row 25), not by this E2E. A production deploy of the fixed binary is row 30.
+- The frontend talks to whatever `VITE_PLUGIN_ADDRESS` the deployer configures — it deliberately has no fallback default, so a missing address disables Install with a stated reason instead of silently targeting a research deployment.
+
+The rows above (§2.5) supersede the original SPECIFIED placeholders for the items the build phase has now proven. What remains is listed below — still SPECIFIED, still ahead of us. **No hash is invented or anticipated here.**
 
 | # | Claim | Evidence | Status |
 |---|---|---|---|
-| 25 | Production `HallpassPlugin` deployed (clean rewrite, malleability fix applied, signature test vectors in CI) | — | **SPECIFIED** (pending build) |
-| 26 | `installPlugin` executes on the production build (direct on hallpass-first accounts; userOp on existing accounts) | — | **SPECIFIED** (pending build) |
-| 27 | In-policy spend succeeds; `SpendAuthorized` emits with correct fields | — | **SPECIFIED** (pending build) |
-| 28 | Over-cap spend reverts with decodable `PerTxCapExceeded` | — | **SPECIFIED** (pending build) |
-| 29 | Allowlist violation reverts; expired session reverts | — | **SPECIFIED** (pending build) |
-| 30 | Real v0.7 userOp through `EntryPoint.handleOps` succeeds with correct window accounting | — | **SPECIFIED** (pending build) |
-| 31 | `revokeSession()` succeeds via account fallback; post-revoke spend reverts `SessionRevoked()` | — | **SPECIFIED** (pending build) |
-| 32 | `authorizeDigest` over-cap reverts; pre-authorized digest + session-key sig → MAGIC; unauthorized digest → `0xffffffff`; stranger call routes correctly; `used`-flag SSTORE flips on verification | — | **SPECIFIED** (pending build) |
-| 33 | `uninstallPlugin` succeeds; post-uninstall the account behaves as before install | — | **SPECIFIED** (pending build) |
+| 32 | `authorizeDigest` over-cap reverts; pre-authorized digest + session-key sig → MAGIC; unauthorized digest → `0xffffffff`; stranger call routes correctly; `used`-flag SSTORE flips on verification | — | **SPECIFIED** (pending) |
+| 33 | `uninstallPlugin` succeeds; post-uninstall the account behaves as before install | — | **SPECIFIED** (pending) |
 | 34 | **Sourcify `exact_match`** for every deployed production contract, links recorded | — | **SPECIFIED** (pending build) — the research contracts were never Sourcify-verified; this is owed, not inherited |
 | 35 | Dashboard stranger test, unassisted end-to-end: connect → create account → install plugin → set policy → generate session key → in-bounds spend → over-cap attempt (plain-language block) → revoke → sweep — no mock data, no dead-ends | — | **SPECIFIED** (pending build) |
 | 36 | Every disabled button shows its reason; every error state names the next action | — | **SPECIFIED** (pending build) |
@@ -108,15 +116,17 @@ The H9 proofs above demonstrate every **mechanism** on mainnet. The production b
 ### What is live on Arc mainnet right now
 
 - The **entire mechanism set** has mainnet receipts from the 2026-10-14 H9 sprint: third-party plugin install via a real v0.7 userOp (row 1); per-tx + rolling-window enforcement with byte-exact revert reasons (rows 8–10); owner revoke + post-revoke `SessionRevoked()` (rows 11–12); the plugin-routed ERC-1271 typed-data gate returning MAGIC on authorized digests and `0xffffffff` on everything else (rows 17–24); the manifest-composition rule (row 2); the factory-allowlist + direct-proxy path (row 3); the facilitator trap (row 18); the malleability bug itself (row 14).
+- **Build-phase re-proof (2026-10-14, row 29):** fresh install → in-policy spend → over-cap revert (`PerTxCapExceeded(0.05,0.01)`, byte-exact) → revoke → post-revoke revert (`SessionRevoked()`), all with full tx hashes in `QA/dust-e2e-report.md`. Run against `0x7C91…` (pre-fix binary — see §2.6 for why that's honest).
 - The live infra addresses in §2.4 are RPC-verified on chain 5042.
-- 19/19 experiment receipts were kill-gate verified (revert reasons byte-exact, all addresses have code). Gas ≈ 0.25 USDC total, zero principal lost.
+- 19/19 H9 experiment receipts were kill-gate verified (revert reasons byte-exact, all addresses have code). Gas ≈ 0.25 USDC total, zero principal lost.
+- Repo-level proofs: 27/27 unit tests (incl. the malleability-bound probe), 19/19 fork tests, 32/32 API contract tests — all green on 2026-10-14.
 
 ### What is NOT live yet (specified, not proven)
 
 - **The production contracts are not deployed.** The research contracts (`0x66A7464f…`, `0x7C912e73…`, `0x20203458…`) are proof-of-mechanism artifacts, not the shipped product. Rewriting, redeploying, and re-running the money-shots against the production build is required — rows 25–34.
 - **Sourcify `exact_match` is owed.** The H9 re-judge explicitly recorded that Sourcify exact_match was not done on the research contracts. The production build must not ship without it (row 34).
 - **The userOp path must be re-proven after the malleability fix.** The research proof tx used an offline-ground passing signature against the buggy bound. A fixed-constant redeploy with a green userOp is required before anyone claims the 4337 path on production.
-- **The dashboard does not exist yet.** Rows 35–40 are entirely ahead of us. No screenshot, mockup, or "flow works" claim counts — only the stranger test on mainnet.
+- **The dashboard exists but the stranger test hasn't run.** Landing + dashboard are built (`tsc`/`vite build` green, dev-server gate passed, no mock data); rows 35–40 stay SPECIFIED until someone unconnected runs connect → install → spend → over-cap block → revoke on mainnet through the UI.
 - **No third-party volume, no committed buyer.** The buyer hunt (H9 W3) found interest and a strong lead (AgentBadge, live Arc project, self-documented bypass) but no commitment. The honest score is 9.0, not 9.2, for exactly this reason.
 - **No public ERC-4337 v0.7 bundler exists on Arc** (proven by research — Circle's modular transport is testnet-only for Arc). Production userOps go through a self-relay service calling `EntryPoint.handleOps`, exactly as the research did. Mempool/bundler acceptance (ERC-7562 storage rules) is NOT proven and is disclosed as such. The UI must never claim bundler support.
 - **The typed-data probe did not flip the `used` flag** — the production 1271 module must include the SSTORE. One plugin per selector per account (the 1271 plugin displaces Circle's multisig 1271 — owner's choice, disclosed).

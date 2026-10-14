@@ -106,12 +106,38 @@ Entries are appended here as build workers complete them. Nothing in this sectio
 - Git: repository initialized on branch `master`; **zero commits** (`git log --oneline` → "your current branch 'master' does not have any commits yet"). Nothing has been committed yet.
 - No mainnet deployments, no txs, no test runs have been recorded in this repo yet — the only proven artifacts are the research-sprint ones above.
 
-### Upcoming (PLANNED — entries to be added as they land)
+### B2 — 2026-10-14 — Contracts: malleability fix applied + 27/27 unit tests + 19/19 fork tests (coordinator + C2 + C3)
 
-- **B2 (PLANNED):** rewrite `HallpassPlugin.sol` with the §R4 malleability fix (`floor(n/2)` bound), signature test-vector suite in CI, fuzzed rolling-window accounting.
-- **B3 (PLANNED):** mainnet deploy of the fixed plugin (gasLimit ≥ 2.2M, §R6 lesson) + **Sourcify exact_match** verification — the re-judge's explicit gate before claiming full strength.
-- **B4 (PLANNED):** re-prove all R3 money-shots on the fixed deployment (in-policy spend, over-cap revert, real userOp, revoke, post-revoke) + R5 typed-data gate **with the `used`-flag SSTORE**.
-- **B5 (PLANNED):** hallpass-first account provisioning (direct-proxy path), EntryPoint `depositTo` funding, session-key registration.
-- **B6 (PLANNED):** relay service (self-relayed `handleOps` — no public v0.7 bundler on Arc) + indexer (event-sourced stats, `SpendAuthorized` feed).
-- **B7 (PLANNED):** frontend dashboard build (Reown AppKit + wagmi + viem, chain 5042) — no owner-only gates, no dead-ends, no mock data (§R10 bible §8 global rules).
+- **H-1 HIGH fixed by the coordinator:** `contracts/src/HallpassPlugin.sol` line 396 carried the pre-fix 62-digit malleability-constant typo (from the H9 work copy). Independently verified and corrected to the true secp256k1 half-order `0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0`; `forge build` green after.
+- C2: `contracts/test/HallpassPlugin.t.sol` — **27/27 green**, including `test_MalleabilityBoundIsTrueHalfOrder`, which behaviorally probes the exact constant the bytecode enforces via revert-reason binary search (no source literal read — a silent re-typo fails CI). Negative control: the probe FAILS against the pre-fix source, extracting the typo'd constant byte-for-byte.
+- C2/C3 corrections to the bible: the real revert is `RecipientNotAllowed(address)` (not `NotAllowlisted`); the auto-generated `policies()` getter returns 9 fields (dynamic `allowlist` omitted); `revokeSession`/`updatePolicy` have no on-contract sender check (authorization is the account's `FID_OWNER` routing).
+- C3: `contracts/test/HallpassFork.t.sol` — **19/19 pass** on an Arc mainnet fork.
+- C4/C5: `contracts/script/DeployHallpass.s.sol` + `scripts/deploy.sh` (≥2.2M gas limit enforced via `--gas-estimate-multiplier 150`; key loaded silently from env-2.txt, never printed) + `contracts/script/VerifyHallpass.sh` (Sourcify `exact_match` plan; explorer 403s behind Cloudflare) + `contracts/DEPLOYMENT.md` (checklist, record table).
+- C6: `contracts/AUDIT-NOTES.md` + `contracts/GAS.md`.
+
+### B3 — 2026-10-14 — Backend: CONTRACT.md conformance + 32/32 API tests green (coordinator + B5)
+
+- B5 wrote `backend/api/CONTRACT.md` v1.0.0 (the test target) + 5 test files; the parallel `server.js` had diverged (wrong routes/envelope, leaked `rpcUrl`/`dbPath` in `/health`). The coordinator rewrote `backend/api/server.js` to conform exactly: `/api/v1/*` routes, uniform error envelope, 405+`Allow`, no secret leaks, RPC-backed vs indexer-backed provenance labels, `createServer({dbPath, rpcUrl, chainId, port})` module interface.
+- Fixed a Node-24 harness bug (`t.after` no longer exists on `before`-hook contexts; teardown now registered once at module top level).
+- `node --test backend/api/` → **32/32 pass**.
+- B1 indexer verified against live mainnet; B3 stats API; B4 `render.yaml` + `Dockerfile` + `.env.example`; B6 docs + OpenAPI.
+
+### B4 — 2026-10-14 — Frontend: /api/v1 migration + gates green (coordinator + F1–F10)
+
+- 10 frontend workers built landing (12 sections, seenadvertising.agency-grade) + dashboard (Connect, Accounts, SessionKeys, Marketplace, PolicyEditor, Activity) + wallet lib (`src/lib/`: Reown AppKit + wagmi + viem, `useHallpass` hook, real userOp builders).
+- Design law `~/workspace/your_files/design-standard.md` applied as binding; Q4 UX audit (8 blockers) resolved: landing mounted at `/`, dashboard routes mounted, no `next/*` imports (Vite only), real connect button, hero stats omitted unless real.
+- The coordinator migrated all API call sites to `/api/v1/*` after the backend conformance rewrite (Hero stats, SessionKeys sessions, Activity cursor feed, shared account-status client) and added `frontend/.env.example`.
+- Gates: `npx tsc --noEmit` clean, `npm run build` green, `npm run dev` starts with zero errors and the landing renders at 200 with no wallet connected (P4 verified).
+
+### B5 — 2026-10-14 — Q1 dust E2E RE-PROVEN on mainnet (coordinator; two Q1 workers died in daemon restarts)
+
+- Fresh account `0xae57003e42e3548A9D39Cd55bCDfAc04363B1d63` (ERC1967 proxy → MSCA impl), plugin `0x7C912e73f9b8B60e4c68d58d52DeC5524e17ABDd`, fresh session key, policy 0.01/0.02 USDC.
+- Full report: `QA/dust-e2e-report.md`. Hashes: install `0x18d20d1f36645456b8614544c0b3a6237639ae150b6ab9e842c32e8c1c402ca0`; in-policy 0.005 `0x9020636267e33400df6639d79d3a18bc7389f6152cb505039c49594f8e555953`; over-cap revert `PerTxCapExceeded(0.05,0.01)` `0x9fdc48e5a47d12ec08eeccbd8dccae3441d03de7e544b5f46d29124cefa074bf`; revoke `0xe1bf2980e4fdb2ff7ed4a2e9f6d308a9a191c4ce8ff499552ed9316a64d9f291`; post-revoke revert `SessionRevoked()` `0xb51c29dadc8e91a167ebecef2bbe5a550deae8b4976cff69b9869fe403d72f11`.
+- Budget: per-tx ≤ 0.01 except the install tx (0.01314 — cold SSTOREs, disclosed); total gas ≈ 0.0221 USDC.
+- Bytecode honesty: `0x7C91…` is pre-fix bytecode (verified via `cast code`); enforcement paths identical — the fix is proven by unit tests, and a fixed-binary production deploy is the founder's step.
+
+### Upcoming (PLANNED)
+
+- **B6 (PLANNED):** production deploy of the fixed plugin (gasLimit ≥ 2.2M) + **Sourcify exact_match** — the re-judge's explicit gate; then re-prove the money-shots on the fixed deployment (founder's step, `contracts/DEPLOYMENT.md`).
+- **B7 (PLANNED):** relay service contract for `VITE_RELAY_URL` (currently throws `RelayNotConfiguredError`; dashboard self-relays) — or remove the relay path if self-relay stays the design.
 - **B8 (PLANNED):** submission package for the program deadline (2026-10-14 23:59 ET).

@@ -81,7 +81,8 @@ export function saveTrackedAccounts(accounts: Address[]): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* API client — GET /api/accounts/:address/plugins                     */
+/* API client — GET /api/v1/accounts/:address (CONTRACT.md §4.2)        */
+/* RPC-backed: the chain is the source of truth for install state.      */
 /* ------------------------------------------------------------------ */
 
 export interface PluginInfo {
@@ -102,24 +103,18 @@ export class ApiError extends Error {
   }
 }
 
-function isPluginInfo(p: unknown): p is PluginInfo {
-  return (
-    typeof p === 'object' &&
-    p !== null &&
-    typeof (p as PluginInfo).address === 'string' &&
-    isAddress((p as PluginInfo).address)
-  );
-}
-
 /**
  * Fetch installed plugins for one smart account from the backend API.
+ * CONTRACT.md §4.2 — the response is read live from the account's
+ * ERC-6900 plugin manager (source: "rpc"). No plugin installed is a normal
+ * empty state (200 with pluginInstalled: false), not an error.
  * Throws ApiError (plain-language message) — never returns invented data.
  */
 export async function fetchAccountPlugins(
   account: Address,
   signal: AbortSignal,
 ): Promise<PluginInfo[]> {
-  const url = `${API_BASE}/api/accounts/${account}/plugins`;
+  const url = `${API_BASE}/api/v1/accounts/${account}`;
   let res: Response;
   try {
     res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
@@ -131,12 +126,16 @@ export async function fetchAccountPlugins(
     );
   }
   if (!res.ok) {
-    throw new ApiError(
-      'bad-status',
-      `The plugin API answered with an error (HTTP ${res.status}). The data below may be stale or missing.`,
-    );
+    let detail = `The plugin API answered with an error (HTTP ${res.status}).`;
+    try {
+      const body = await res.json();
+      if (body?.error?.message) detail = body.error.message;
+    } catch {
+      /* keep generic detail */
+    }
+    throw new ApiError('bad-status', detail);
   }
-  let json: unknown;
+  let json: any;
   try {
     json = await res.json();
   } catch {
@@ -145,16 +144,21 @@ export async function fetchAccountPlugins(
       'The plugin API answered, but not with data this page understands.',
     );
   }
-  const list = Array.isArray(json)
-    ? json
-    : (json as { plugins?: unknown }).plugins;
-  if (!Array.isArray(list)) {
-    throw new ApiError(
-      'bad-data',
-      'The plugin API answered, but not with data this page understands.',
-    );
-  }
-  return list.filter(isPluginInfo);
+  if (!json || json.pluginInstalled !== true) return [];
+  const addr = typeof json.pluginAddress === 'string' ? json.pluginAddress : '';
+  if (!isAddress(addr)) return [];
+  const policy = json.policy && typeof json.policy === 'object' ? json.policy : null;
+  const info: PluginInfo = {
+    address: addr,
+    name: 'Hallpass policy plugin',
+    status: policy && policy.revoked === true ? 'revoked' : 'active',
+    policyHash: typeof json.policyHash === 'string' ? json.policyHash : undefined,
+    installedAt:
+      typeof json.installedAtBlock === 'number'
+        ? `block ${json.installedAtBlock.toLocaleString()}`
+        : undefined,
+  };
+  return [info];
 }
 
 /* ------------------------------------------------------------------ */

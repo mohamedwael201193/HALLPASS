@@ -4,7 +4,7 @@
 //   - account list: localStorage registry of addresses the USER added
 //     (never seeded — an empty registry is an honest empty state)
 //   - balances + plugin count: Arc mainnet via eth_call (chain-sourced)
-//   - plugin details: GET /api/accounts/:address/plugins (API-sourced;
+//   - plugin details: GET /api/v1/accounts/:address (CONTRACT.md §4.2,
 //     unreachable API is stated plainly with a retry — never papered over)
 //
 // Four states per screen/section: main / empty / loading / error.

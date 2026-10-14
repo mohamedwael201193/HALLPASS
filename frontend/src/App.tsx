@@ -43,6 +43,8 @@ export default function App() {
             <Route index element={<ConnectScreen />} />
             {/* (b) My accounts — smart accounts + installed plugins with status */}
             <Route path="accounts" element={<SessionKeysScreen />} />
+            {/* Session keys — stable deep-link alias (Activity CTAs land here) */}
+            <Route path="session-keys" element={<SessionKeysScreen />} />
             {/* (c) Plugin marketplace — install/uninstall via real on-chain userOps */}
             <Route path="marketplace" element={<MarketplaceScreen />} />
             {/* (d) Policy editor — sliders + live "what this allows" preview */}

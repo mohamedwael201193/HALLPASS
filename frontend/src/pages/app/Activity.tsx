@@ -6,13 +6,14 @@ import ErrorState from '../../components/ErrorState'
 
 /* ============================================================================
  * Activity — every spend attempt on one smart account.
- * - Rows come ONLY from GET /api/activity?account=&page=&limit= (indexer
- *   cache of chain events + relay-observed reverts). Nothing is invented.
- * - The backend ships each row with a human `headline` and `detail`; the
- *   frontend adds the plain-words FIX derived from the backend's own
- *   sentence. Blocked rows always state that nothing was spent.
- * - Filters are client-side over loaded rows (the API has no kind filter);
- *   counts describe what is loaded, not the whole history.
+ * - Rows come ONLY from GET /api/v1/accounts/{address}/activity (CONTRACT.md
+ *   §4.3 — indexer cache of chain events + relay-observed reverts).
+ *   Nothing is invented. Cursor pagination via the API's opaque nextCursor.
+ * - The backend ships each blocked row with a plain-words reasonText; the
+ *   frontend adds the FIX derived from the reason code. Blocked rows always
+ *   state that nothing was spent.
+ * - Filters are client-side over loaded rows; counts describe what is
+ *   loaded, not the whole history.
  * ========================================================================== */
 
 const EXPLORER_TX = 'https://explorer.arc.io/tx/'
@@ -130,15 +131,44 @@ export default function Activity({ accountAddress }: ActivityProps) {
   const [items, setItems] = useState<ApiItem[]>([])
   const [state, setState] = useState<LoadState>('loading')
   const [errorDetail, setErrorDetail] = useState('')
-  const [page, setPage] = useState(1)
-  const [pages, setPages] = useState(1)
-  const [total, setTotal] = useState(0)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [asOfBlock, setAsOfBlock] = useState<number | null>(null)
   const [feedNote, setFeedNote] = useState<string | null>(null)
 
+  /** Map a CONTRACT.md §4.3 row onto the local ApiItem model. */
+  function mapRow(r: any): ApiItem | null {
+    if (!r || (r.kind !== 'allowed' && r.kind !== 'blocked')) return null
+    const allowed = r.kind === 'allowed'
+    const amountRaw = typeof r.amountRaw === 'string' ? r.amountRaw : '0'
+    const amountFmt = typeof r.amount === 'string' ? r.amount : amountRaw
+    const to = typeof r.to === 'string' ? r.to : null
+    const sessionKey = typeof r.sessionKey === 'string' ? r.sessionKey : null
+    const tx = typeof r.txHash === 'string' ? r.txHash : ''
+    const headline = allowed
+      ? `${amountFmt} USDC → ${truncate(to)} — within policy`
+      : `BLOCKED: ${amountFmt} USDC → ${truncate(to)}`
+    const detail = allowed
+      ? `Session ${truncate(sessionKey)} spent ${amountFmt} USDC within policy.`
+      : typeof r.reasonText === 'string' && r.reasonText.length > 0
+        ? r.reasonText
+        : 'Blocked by policy. Nothing was spent.'
+    return {
+      allowed,
+      headline,
+      detail,
+      account: account ?? '',
+      sessionKey,
+      to,
+      amount: { raw: amountRaw, formatted: amountFmt, unit: 'USDC' },
+      tx,
+      txUrl: tx ? `${EXPLORER_TX}${tx}` : '',
+      block: typeof r.blockNumber === 'number' ? r.blockNumber : 0,
+    }
+  }
+
   const loadPage = useCallback(
-    async (pageNum: number, append: boolean) => {
+    async (cursor: string | null, append: boolean) => {
       if (!account) return
       if (append) setLoadingMore(true)
       else {
@@ -146,12 +176,9 @@ export default function Activity({ accountAddress }: ActivityProps) {
         setErrorDetail('')
       }
       try {
-        const q = new URLSearchParams({
-          account,
-          page: String(pageNum),
-          limit: String(PAGE_LIMIT),
-        })
-        const res = await fetch(`${API_BASE}/api/activity?${q.toString()}`)
+        const q = new URLSearchParams({ limit: String(PAGE_LIMIT) })
+        if (cursor) q.set('cursor', cursor)
+        const res = await fetch(`${API_BASE}/api/v1/accounts/${account}/activity?${q.toString()}`)
         if (!res.ok) {
           let detail = `API responded ${res.status}`
           try {
@@ -163,14 +190,18 @@ export default function Activity({ accountAddress }: ActivityProps) {
           throw new Error(detail)
         }
         const body = await res.json()
-        const list: ApiItem[] = Array.isArray(body?.data?.items) ? body.data.items : []
-        const pg = body?.data?.pagination
+        const rawItems: any[] = Array.isArray(body?.items) ? body.items : []
+        const list: ApiItem[] = rawItems
+          .map(mapRow)
+          .filter((x): x is ApiItem => x !== null)
         setItems((prev) => (append ? [...prev, ...list] : list))
-        setPage(typeof pg?.page === 'number' ? pg.page : pageNum)
-        setPages(typeof pg?.pages === 'number' ? pg.pages : pageNum)
-        setTotal(typeof pg?.total === 'number' ? pg.total : list.length)
+        setNextCursor(typeof body?.nextCursor === 'string' ? body.nextCursor : null)
         setAsOfBlock(typeof body?.asOfBlock === 'number' ? body.asOfBlock : null)
-        setFeedNote(typeof body?.data?.note === 'string' ? body.data.note : null)
+        setFeedNote(
+          body?.source === 'indexer'
+            ? 'From the indexer event cache — the chain remains the source of truth.'
+            : null,
+        )
         setState('ready')
       } catch (e: any) {
         setErrorDetail(e?.message ?? 'Network error')
@@ -185,9 +216,8 @@ export default function Activity({ accountAddress }: ActivityProps) {
   // Fresh load whenever the account changes.
   useEffect(() => {
     setItems([])
-    setPage(1)
-    setPages(1)
-    void loadPage(1, false)
+    setNextCursor(null)
+    void loadPage(null, false)
   }, [account, loadPage])
 
   const sessionKeys = useMemo(() => {
@@ -274,7 +304,7 @@ export default function Activity({ accountAddress }: ActivityProps) {
         </label>
 
         <span className="font-body text-xs text-text/40">
-          {total > 0 ? `${total} total · ${items.length} loaded` : 'Loading…'}
+          {items.length > 0 ? `${items.length} loaded` : 'Loading…'}
         </span>
       </div>
 
@@ -293,7 +323,7 @@ export default function Activity({ accountAddress }: ActivityProps) {
           message="The feed comes from the indexer, and it didn't answer. Your on-chain history is unaffected — this is just a display problem."
           technicalDetail={errorDetail || undefined}
           retryLabel="Try again"
-          onRetry={() => void loadPage(1, false)}
+          onRetry={() => void loadPage(null, false)}
         />
       )}
 
@@ -335,14 +365,14 @@ export default function Activity({ accountAddress }: ActivityProps) {
             />
           ))}
 
-          {page < pages && (
+          {nextCursor && (
             <button
               type="button"
               disabled={loadingMore}
-              onClick={() => void loadPage(page + 1, true)}
+              onClick={() => void loadPage(nextCursor, true)}
               className="mx-auto mt-2 rounded-full border border-text/20 px-6 py-2.5 font-body text-sm font-semibold text-text transition-colors hover:border-amber/60 hover:text-amber disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loadingMore ? 'Loading…' : `Show older activity (page ${page + 1} of ${pages})`}
+              {loadingMore ? 'Loading…' : 'Show older activity'}
             </button>
           )}
           <p className="text-center font-body text-xs text-text/40">
