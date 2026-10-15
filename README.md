@@ -180,7 +180,7 @@ hallpass-build/
 │   │                           policy updates, revokes, authorizations; per-session rollups
 │   │                           (the chain is truth — the indexer is cache, rebuildable)
 │   ├── reputation/           ← watcher.js: on session close → giveFeedback to ERC-8004 registry
-│   ├── render.yaml           ← Render blueprint: hallpass-api (web) + hallpass-indexer (worker)
+│   ├── render.yaml           ← Render blueprint: hallpass-api, free web service
 │   ├── Dockerfile / start.sh ← container entry points
 │   └── README.md             ← service details + API surface
 ├── frontend/                 ← Reown AppKit + wagmi + viem (Arc chain built-in, 5042)
@@ -408,14 +408,9 @@ vercel --prod
 
 ### Backend → Render
 
-`backend/render.yaml` is the blueprint: one **web** service (`hallpass-api`) + one **worker** (`hallpass-indexer`), each with its own 1 GB disk for SQLite. In the Render dashboard, set every `sync: false` variable:
+`backend/render.yaml` is one **free web service**, `hallpass-api`. Public env (RPC, plugin, EntryPoint, ephemeral `DB_PATH=/tmp/hallpass.db`) is already in the blueprint. Render injects `PORT`. The process listens on `0.0.0.0`.
 
-| Service | Env vars to set |
-|---|---|
-| `hallpass-api` | `RPC_URL`, `PLUGIN_ADDRESS`, `ENTRYPOINT_ADDRESS`, `FRONTEND_URL`, **`RELAYER_PRIVATE_KEY`** (secret) |
-| `hallpass-indexer` | `RPC_URL`, `PLUGIN_ADDRESS` |
-
-No secrets in `render.yaml` itself — `RELAYER_PRIVATE_KEY` is set in the dashboard only.
+The free tier has no persistent disk and no background worker. The indexer and the reputation watcher stay in the repo and are not part of this service. Session reads come from Arc RPC, so a free-instance restart does not fake or drop on-chain policy. The activity feed is the indexer cache and stays honestly empty while the indexer is not running. No private key is set on this service.
 
 ---
 

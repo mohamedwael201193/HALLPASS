@@ -405,3 +405,6 @@ stays outside the repo and was never typed into the page.
 Spends are direct session-key calls, the same path as Q2. The userOp-through-EntryPoint proof remains W1 on a different account. This account was not reinstalled.
 
 Reown project id is in gitignored `frontend/.env.local` only. Wallet connected as the owner before the two owner transactions.
+
+### Render is a free web service
+`backend/render.yaml` is `plan: free` for `hallpass-api` only. The old blueprint asked for two Starter services and two 1 GB disks. The free tier has no disk and no worker, so the indexer and the reputation watcher are not declared there. SQLite is `/tmp/hallpass.db` and is ephemeral; session reads stay on Arc RPC. The API listens on `0.0.0.0` and the health check is `GET /api/v1/health`. No signing key is configured on that service. The watcher still exits 2 without a real `REPUTATION_AGENT_ID`, and that id is not invented.

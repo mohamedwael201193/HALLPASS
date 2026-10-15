@@ -1,68 +1,38 @@
-# Render Blueprint — HALLPASS backend (Arc mainnet, chain 5042)
-# One web service for the API, one background worker for the event indexer.
-# No secrets in this file: every sensitive value uses `sync: false` and is
-# set in the Render dashboard (or via RENDER_API_KEY tooling), never here.
+# Render Blueprint — HALLPASS API (Arc mainnet, chain 5042)
+# One FREE web service. No paid plan, no disk, no background worker.
 #
-# Prereqs before first deploy:
-#   1. backend/api/package.json exists with "start": "node server.js"
-#      (npm start runs in backend/api per repo convention)
-#   2. backend/indexer/index.js exists (event indexer entrypoint)
-#   3. Set all `sync: false` vars in the Render dashboard for BOTH services.
+# Free-tier limits this blueprint accepts:
+#   - Web services only. A worker (the indexer, the reputation watcher)
+#     is not free, so it is not declared here.
+#   - No persistent disk. SQLite lives at /tmp/hallpass.db and is wiped
+#     when the free instance sleeps or restarts. Session and policy reads
+#     come from Arc RPC, so that wipe does not invent or hide chain state.
+#     The activity feed is the indexer cache; with no indexer it stays an
+#     honest empty result.
+#   - The process must listen on 0.0.0.0 and on the PORT Render injects.
+#
+# No secrets in this file. The read API does not sign transactions.
+# RELAYER_PRIVATE_KEY is not set here: the relay is not this service.
 
 services:
-  # --- API (web) -----------------------------------------------------------
   - type: web
     name: hallpass-api
     runtime: node
-    plan: starter
+    plan: free
     rootDir: backend/api
     buildCommand: npm ci --omit=dev
     startCommand: npm start
-    healthCheckPath: /health
-    disk:
-      name: hallpass-api-data
-      mountPath: /var/data
-      sizeGB: 1
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_VERSION
         value: "20"
-      - key: PORT
-        sync: false # Render injects PORT automatically; set only to override
       - key: RPC_URL
-        sync: false # Arc mainnet RPC, e.g. https://rpc.mainnet.arc.io (public value)
+        value: https://rpc.mainnet.arc.io
+      - key: CHAIN_ID
+        value: "5042"
       - key: PLUGIN_ADDRESS
-        sync: false # HallpassPlugin deployment on Arc 5042 (public value)
+        value: "0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9"
       - key: ENTRYPOINT_ADDRESS
-        sync: false # ERC-4337 v0.7 EntryPoint on Arc 5042 (public value)
+        value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - key: DB_PATH
-        value: /var/data/hallpass.db # sqlite file on the attached disk
-      - key: FRONTEND_URL
-        sync: false # Dashboard origin for CORS (public value)
-      - key: RELAYER_PRIVATE_KEY
-        sync: false # SECRET: relay service key for EntryPoint.handleOps
-
-  # --- Indexer (background worker) -----------------------------------------
-  # NOTE: the worker keeps its own sqlite db on its own disk. If the API's
-  # activity feed must read what the indexer writes, promote both to a
-  # shared database (set DB_PATH -> a shared store, or add DATABASE_URL)
-  # instead of relying on two separate files.
-  - type: worker
-    name: hallpass-indexer
-    runtime: node
-    plan: starter
-    rootDir: backend
-    buildCommand: npm ci --omit=dev
-    startCommand: node indexer/index.js
-    disk:
-      name: hallpass-indexer-data
-      mountPath: /var/data
-      sizeGB: 1
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
-      - key: RPC_URL
-        sync: false # same Arc RPC as the API (public value)
-      - key: PLUGIN_ADDRESS
-        sync: false # same HallpassPlugin address (public value)
-      - key: DB_PATH
-        value: /var/data/indexer.db # sqlite file on the attached disk
+        value: /tmp/hallpass.db

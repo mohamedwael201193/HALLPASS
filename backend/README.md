@@ -55,11 +55,10 @@ Env vars (names only — never commit values):
 
 ## Deploy on Render
 
-- **Worker service** `hallpass-indexer`: runs the indexer; env: `RPC_URL`, `PLUGIN_ADDRESS`, `START_BLOCK`, `DB_PATH=/var/data/hallpass.db`
-- **Web service** `hallpass-api`: runs `node server.js`; env: `RPC_URL`, `PLUGIN_ADDRESS`, `DB_PATH=/var/data/hallpass.db`; internal, exposed only to the dashboard
-- **Relay service**: **planned, not implemented** — there is no public v0.7 bundler on Arc, so installs/spends currently self-relay from the owner's wallet
-
-Each service deploys independently. The indexer is stateless apart from the SQLite file; the API is stateless.
+- **Free web service** `hallpass-api` (`render.yaml`, `plan: free`): `npm start` from `backend/api`. Listens on `0.0.0.0` and Render's `PORT`. Health check is `GET /api/v1/health`.
+- SQLite is `/tmp/hallpass.db` and does not survive sleep or restart. That is a free-tier limit, not a paid disk. Policy and session endpoints read Arc RPC.
+- The indexer and the reputation watcher are not in the blueprint. A Render worker is not a free web service, and the watcher refuses to start without a real `REPUTATION_AGENT_ID`.
+- **Relay service**: **planned, not implemented** — there is no public v0.7 bundler on Arc, so installs/spends currently self-relay from the owner's wallet. This free service does not hold a signing key.
 
 ## Honest status
 

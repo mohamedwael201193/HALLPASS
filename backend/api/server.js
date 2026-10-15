@@ -749,7 +749,10 @@ function createServer(opts) {
         try {
           openDb(); // bootstrap schema now; failures surface as db.ok:false
         } catch (e) { /* openDb never throws; kept defensive */ }
-        server = app.listen(listenPort, '127.0.0.1', function () { resolve(); });
+        // 0.0.0.0 so a Render free web service can route to the process.
+        // Local tests still connect through 127.0.0.1.
+        const listenHost = process.env.HOST || '0.0.0.0';
+        server = app.listen(listenPort, listenHost, function () { resolve(); });
         server.on('error', reject);
       });
     },
@@ -779,7 +782,7 @@ if (require.main === module) {
   });
   api.start().then(function () {
     console.log(
-      'hallpass-api v' + VERSION + ' listening on 127.0.0.1:' + api.port +
+      'hallpass-api v' + VERSION + ' listening on ' + (process.env.HOST || '0.0.0.0') + ':' + api.port +
       ' (chain 5042; DB ' + (process.env.DB_PATH ? 'from DB_PATH' : 'default') + ')'
     );
   }).catch(function (e) {
