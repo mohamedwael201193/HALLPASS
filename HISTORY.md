@@ -415,3 +415,9 @@ Reown project id is in gitignored `frontend/.env.local` only. Wallet connected a
 - Vercel project `hallpass`, production https://hallpass-coral.vercel.app. Same local env keys, plus the public `VITE_RPC_URL`, `VITE_ENTRYPOINT_ADDRESS`, `VITE_PLUGIN_ADDRESS`, `VITE_REOWN_PROJECT_ID`, and `VITE_API_BASE_URL=https://hallpass-api.onrender.com`. New projects default to Vercel Authentication; `ssoProtection` was cleared so the production URL is public. Keys that are not `VITE_` are not compiled into the static bundle.
 
 Marketplace reads `?account=` like the other screens, and shows the EntryPoint deposit with a real "Add 0.08 USDC deposit" transaction. Install userOps revert AA13 when that deposit is 0. The Q2 account's deposit was 0.
+
+### Deployed marketplace, in progress
+On https://hallpass-coral.vercel.app/app/marketplace?account=0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f, owner `0xf76e…71a3` confirmed two transactions:
+- EntryPoint `depositTo` of 0.08 USDC: `0x90c58b7e7a7e3007c7109c8bc3597e5623482f1950f1e018298d119ba19aa743`, status 1, block 26029805. `balanceOf` reads `8e16`.
+- `uninstallPlugin`: `0x8131cdfbad0f73cb292672c00ac4068c82551e495bc25e54b3fada0734a9c579`, status 1. `getInstalledPlugins()` is empty, and the page said the chain confirms the plugin is off the account.
+The reinstall userOp (session `0x53f4…206A`, caps 0.01 / 0.05) was submitted from that same page and was still waiting on the wallet when this was written. Spend and revoke come after that install confirms.
