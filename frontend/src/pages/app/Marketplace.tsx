@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useWalletClient } from 'wagmi'
 import { type Address, type Hex, isAddress } from 'viem'
 import { useHallpass } from '../../lib/useHallpass'
 import {
+  formatNativeUsdc,
   parsedAccountAbi,
+  publicClient,
   usdcToNativeWei,
   USDC_ADDRESS,
   EURC_ADDRESS,
   type PolicyParams,
   type PluginVerification,
 } from '../../lib/contracts'
+import { getEntryPointDeposit } from '../../lib/userops'
 import PolicyCard, {
   type InstallState,
   type PluginMeta,
@@ -132,9 +136,16 @@ function SkeletonCard() {
  * the wallet stack is configured (P1: no wagmi hook ever runs unconfigured,
  * nothing throws); otherwise it renders WalletDownState.
  */
-function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
+function MarketplaceLive({ accountAddress: accountProp }: { accountAddress?: Address }) {
+  const [searchParams] = useSearchParams()
+  const queryAccount = searchParams.get('account')
+  const accountAddress =
+    accountProp ??
+    (queryAccount && isAddress(queryAccount) ? (queryAccount as Address) : undefined)
   const hp = useHallpass()
   const { data: walletClient } = useWalletClient()
+  const [depositWei, setDepositWei] = useState<bigint | null>(null)
+  const [toppingUp, setToppingUp] = useState(false)
 
   const [installState, setInstallState] = useState<InstallState>('checking')
   const [verification, setVerification] = useState<PluginVerification | null>(null)
@@ -161,6 +172,44 @@ function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
 
   const pollRef = useRef(0)
   const plugin = hp.pluginAddress
+
+  const refreshDeposit = useCallback(async () => {
+    if (!accountAddress) {
+      setDepositWei(null)
+      return
+    }
+    try {
+      setDepositWei(await getEntryPointDeposit(publicClient, accountAddress))
+    } catch {
+      setDepositWei(null)
+    }
+  }, [accountAddress])
+
+  useEffect(() => {
+    void refreshDeposit()
+  }, [refreshDeposit])
+
+  async function handleTopUp() {
+    if (!accountAddress) return
+    setToppingUp(true)
+    setNotice(null)
+    try {
+      const txHash = await hp.topUpEntryPointDeposit(accountAddress, usdcToNativeWei('0.08'))
+      setNotice({
+        kind: 'ok',
+        text: 'Deposit sent. The install userOp can pay for itself once this confirms.',
+        tx: txHash,
+      })
+      await refreshDeposit()
+    } catch (e) {
+      setNotice({
+        kind: 'bad',
+        text: `Deposit didn't go through: ${e instanceof Error ? e.message : 'unknown error'}. Nothing was deposited.`,
+      })
+    } finally {
+      setToppingUp(false)
+    }
+  }
 
   const refreshFromChain = useCallback(async () => {
     if (!accountAddress || !plugin) {
@@ -635,6 +684,23 @@ function MarketplaceLive({ accountAddress }: { accountAddress?: Address }) {
         />
       ) : (
         <>
+          {accountAddress && (
+            <div className="mb-5 rounded-[10px] border border-amber/30 bg-ink p-4 font-body text-[15px] leading-relaxed text-text">
+              <p>
+                EntryPoint deposit for this account:{' '}
+                {depositWei == null ? 'reading the chain…' : `${formatNativeUsdc(depositWei)} USDC`}.
+                An install userOp reverts AA13 until this deposit covers the prefund. The deposit is not a fee you lose — unused deposit stays on the account.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleTopUp()}
+                disabled={toppingUp || !hp.isConnected || !hp.isArc}
+                className="mt-3 min-h-[44px] rounded-full border border-amber/50 px-6 py-2.5 text-sm font-semibold text-amber disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {toppingUp ? 'Confirm the deposit in your wallet…' : 'Add 0.08 USDC deposit'}
+              </button>
+            </div>
+          )}
           {checking || !plugin ? (
             <SkeletonCard />
           ) : (
