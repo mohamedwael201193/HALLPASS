@@ -37,6 +37,7 @@ import {
   formatNativeUsdc,
   pluginAbi,
   publicClient,
+  readOnChainPolicy,
 } from '../../lib/contracts';
 import TokenIcon, { type TokenKind } from '../TokenIcon';
 import TapeEmptyState, {
@@ -614,56 +615,24 @@ export default function PolicyHashPanel({ account }: { account: Address }) {
     let cancelled = false;
     setState({ status: 'loading' });
     (async () => {
-      const p = (await publicClient.readContract({
-        address: PLUGIN_ADDRESS,
-        abi: parsedPluginAbi,
-        functionName: 'policies',
-        args: [account],
-      })) as unknown as [
-        Address, // sessionKey
-        Address, // owner
-        bigint, // perTxCap
-        bigint, // windowCap
-        bigint, // windowSecs
-        bigint, // expiry
-        Address[], // allowlist
-        bigint, // windowStart
-        bigint, // windowSpent
-        boolean, // revoked
-        Address[], // tokens
-        number[], // tokenDecimals
-      ];
-      const [
-        sessionKey,
-        owner,
-        perTxCap,
-        windowCap,
-        windowSecs,
-        expiry,
-        allowlist,
-        windowStart,
-        windowSpent,
-        revoked,
-        tokens,
-        ,
-      ] = p;
+      const p = await readOnChainPolicy(account, publicClient, PLUGIN_ADDRESS);
       if (cancelled) return;
-      if (sessionKey.toLowerCase() === zeroAddress) {
+      if (p.sessionKey.toLowerCase() === zeroAddress) {
         setState({ status: 'none' });
         return;
       }
       const rollup: PolicyRollup = {
-        sessionKey,
-        owner,
-        perTxCapWei: perTxCap,
-        windowCapWei: windowCap,
-        windowSecs,
-        windowStart,
-        windowSpent,
-        expiry,
-        allowlist: Array.isArray(allowlist) ? allowlist : [],
-        tokens: Array.isArray(tokens) ? tokens : [],
-        revoked,
+        sessionKey: p.sessionKey,
+        owner: p.owner,
+        perTxCapWei: p.perTxCapWei,
+        windowCapWei: p.windowCapWei,
+        windowSecs: p.windowSecs,
+        windowStart: p.windowStart,
+        windowSpent: p.windowSpent,
+        expiry: p.expiry,
+        allowlist: p.allowlist,
+        tokens: p.tokens,
+        revoked: p.revoked,
       };
       setState({
         status: 'ready',

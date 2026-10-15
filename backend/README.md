@@ -47,7 +47,7 @@ cd backend/api && npm install && npm start   # PORT=8787 by default
 
 Env vars (names only — never commit values):
 - `RPC_URL` — Arc mainnet RPC (default `https://rpc.mainnet.arc.io`)
-- `PLUGIN_ADDRESS` — deployed HallpassPlugin on Arc 5042 (required by the indexer; the API falls back to the H9 research deployment and says so in `/api/config`)
+- `PLUGIN_ADDRESS` — deployed HallpassPlugin on Arc 5042 (required by the indexer; the API defaults to production v0.2.0 `0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9`)
 - `START_BLOCK` — block to begin event backfill from (indexer)
 - `DB_PATH` — SQLite file path (indexer writes, API reads; default `backend/indexer/db.sqlite`)
 - `PORT` — API listen port (default 8787; Render injects this)

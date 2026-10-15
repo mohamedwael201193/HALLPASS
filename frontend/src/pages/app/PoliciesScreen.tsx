@@ -197,6 +197,7 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [nonce, setNonce] = useState(0);
+  const [sessionKeyDraft, setSessionKeyDraft] = useState('');
 
   const load = useCallback(() => {
     if (!account) {
@@ -208,7 +209,7 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
       return;
     }
     let cancelled = false;
-    setState({ status: 'loading' });
+    setState((current) => (current.status === 'ready' ? current : { status: 'loading' }));
     hp
       .getPolicy(account)
       .then((p) => {
@@ -217,6 +218,11 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
           setState({ status: 'none' });
           return;
         }
+        setSessionKeyDraft((draft) =>
+          isAddress(draft.trim()) && draft.trim().toLowerCase() !== p.sessionKey.toLowerCase()
+            ? draft
+            : p.sessionKey,
+        );
         setState({
           status: 'ready',
           policy: {
@@ -255,8 +261,12 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
       // Window/tokens carry over from the live policy — the editor only
       // changes per-payment cap, expiry and destinations.
       const current = await hp.getPolicy(account);
+      const nextSession = sessionKeyDraft.trim();
+      if (!isAddress(nextSession)) {
+        throw new Error('Session key must be a valid address. Nothing was saved.');
+      }
       const txHash = await hp.updatePolicy(account, {
-        sessionKey: current.sessionKey,
+        sessionKey: nextSession as Address,
         owner: current.owner,
         perTxCapWei: values.perTxCapWei,
         windowCapWei: current.windowCapWei,
@@ -269,7 +279,7 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
       setNonce((n) => n + 1); // re-read the enforcement panel from chain
       return { txHash };
     },
-    [account, hp],
+    [account, hp, sessionKeyDraft],
   );
 
   const saveDisabledReason: string | null = hp.walletSetupError
@@ -309,6 +319,12 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
         <span>Account</span>
         <span className="font-mono">{truncateAddress(account)}</span>
         <CopyButton value={account} label="Copy account address" />
+        <Link
+          to={`/app/policy-audit?account=${account}`}
+          className="ml-2 text-amber hover:text-amber/80"
+        >
+          Policy audit
+        </Link>
       </p>
 
       <div className="mt-6 space-y-6">
@@ -361,6 +377,23 @@ function PoliciesLive({ hp }: { hp: UseHallpass }) {
         {state.status === 'ready' && (
           <>
             <EnforcementPanel p={state.policy} hp={hp} />
+            <label className="block rounded-2xl border border-text/10 bg-text/[0.03] p-5">
+              <span className="font-display text-lg font-bold text-text">Session key</span>
+              <p className="mt-1 text-sm text-text/60">
+                The address the agent spends from. Paste a new one to rotate the pass.
+                The private key stays with the agent — this page never asks for it.
+              </p>
+              <input
+                value={sessionKeyDraft}
+                onChange={(e) => setSessionKeyDraft(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                className="mt-3 min-h-[52px] w-full rounded-xl border border-text/20 bg-ink px-4 font-mono text-sm text-text focus:border-amber/60 focus:outline-none"
+              />
+              {sessionKeyDraft.trim() !== '' && !isAddress(sessionKeyDraft.trim()) && (
+                <p className="mt-2 text-sm text-red-300">That is not a valid address. Save will refuse until it is.</p>
+              )}
+            </label>
             <PolicyEditor
               sessionKeyAddress={state.policy.sessionKey}
               initialPolicy={{

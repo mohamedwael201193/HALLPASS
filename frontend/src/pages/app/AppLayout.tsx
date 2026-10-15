@@ -79,6 +79,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/app/session-keys': 'Session keys',
   '/app/marketplace': 'Marketplace',
   '/app/policy': 'Policies',
+  '/app/policy-audit': 'Policy audit',
   '/app/activity': 'Activity',
 };
 

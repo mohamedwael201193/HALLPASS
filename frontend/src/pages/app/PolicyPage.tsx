@@ -7,10 +7,7 @@
  * go through the public viem client). The plugin address still comes from
  * VITE_PLUGIN_ADDRESS (env only); when unset the panel says so honestly.
  *
- * ROUTE WIRING (not done — App.tsx is owned by the dashboard-v2 worker):
- *   import PolicyPage from './pages/app/PolicyPage'
- *   const PolicyPage = lazy(() => import('./pages/app/PolicyPage'))
- *   <Route path="policy-audit" element={<PolicyPage />} />
+ * Route: /app/policy-audit?account=0x… (wired in App.tsx).
  */
 
 import { Link, useSearchParams } from 'react-router-dom';

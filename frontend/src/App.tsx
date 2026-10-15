@@ -30,6 +30,8 @@ const SessionKeysScreen = lazy(() => import('./pages/app/SessionKeys'))
 const MarketplaceScreen = lazy(() => import('./pages/app/Marketplace'))
 /** B2 — (d) Policies screen: plain-language enforcement panel + editor. */
 const PoliciesScreen = lazy(() => import('./pages/app/PoliciesScreen'))
+/** Policy audit: committed hash, session rollups, CSV export. Read-only. */
+const PolicyAuditPage = lazy(() => import('./pages/app/PolicyPage'))
 /** B2 — (e) Activity: every spend attempt — allowed (amber) or blocked (why + fix). */
 const ActivityScreen = lazy(() => import('./pages/app/Activity'))
 /** 404 — never a dead end: route the user somewhere useful. */
@@ -53,6 +55,8 @@ export default function App() {
             <Route path="marketplace" element={<MarketplaceScreen />} />
             {/* (d) Policies — what the plugin enforces (plain language) + editor */}
             <Route path="policy" element={<PoliciesScreen />} />
+            {/* Policy audit — committed hash, session rollups, CSV from events */}
+            <Route path="policy-audit" element={<PolicyAuditPage />} />
             {/* (e) Activity — every spend attempt: allowed (amber) or blocked (why + fix) */}
             <Route path="activity" element={<ActivityScreen />} />
             <Route path="*" element={<Navigate to="/app" replace />} />

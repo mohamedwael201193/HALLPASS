@@ -21,8 +21,8 @@ import {
   PLUGIN_ADDRESS,
   CONFIGURED_MANIFEST_HASH,
   ENTRYPOINT_ADDRESS,
-  parsedPluginAbi,
   publicClient as defaultPublicClient,
+  readOnChainPolicy,
   fetchManifestHash,
   verifyPlugin,
   getInstalledPlugins,
@@ -245,19 +245,7 @@ function useHallpassLive(): UseHallpass {
       getInstalledPlugins: (account) => getInstalledPlugins(client, account),
       isPluginInstalled: (account) =>
         isPluginInstalled(client, account, requirePlugin()),
-      getPolicy: async (account) => {
-        const plugin = requirePlugin();
-        const p = await client.readContract({
-          address: plugin,
-          abi: parsedPluginAbi,
-          functionName: 'policies',
-          args: [account],
-        });
-        const [sessionKey, owner, perTxCap, windowCap, windowSecs, expiry, allowlist, windowStart, windowSpent, revoked, tokens, tokenDecimals] = p as unknown as [
-          Address, Address, bigint, bigint, bigint, bigint, Address[], bigint, bigint, boolean, Address[], number[],
-        ];
-        return { sessionKey, owner, perTxCapWei: perTxCap, windowCapWei: windowCap, windowSecs, expiry, allowlist, tokens, tokenDecimals, windowStart, windowSpent, revoked };
-      },
+      getPolicy: (account) => readOnChainPolicy(account, client, requirePlugin()),
       getUsdcBalance: (account) => getUsdcBalance(client, account),
       fetchManifestHash: (plugin) => fetchManifestHash(client, plugin),
       verifyPlugin: (plugin) => verifyPlugin(client, plugin),

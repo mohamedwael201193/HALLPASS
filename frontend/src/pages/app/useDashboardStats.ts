@@ -23,8 +23,8 @@ import {
   PLUGIN_ADDRESS,
   USDC_ADDRESS,
   getTokenBalance,
-  parsedPluginAbi,
   publicClient,
+  readOnChainPolicy,
 } from '../../lib/contracts';
 import { WALLET_SETUP_ERROR } from '../../lib/wagmi';
 import { loadTrackedAccounts, plainError } from './shared';
@@ -73,12 +73,7 @@ async function readAccountSession(
     getTokenBalance(publicClient, USDC_ADDRESS, account),
     getTokenBalance(publicClient, EURC_ADDRESS, account),
     PLUGIN_ADDRESS
-      ? (publicClient.readContract({
-          address: PLUGIN_ADDRESS,
-          abi: parsedPluginAbi,
-          functionName: 'policies',
-          args: [account],
-        }) as Promise<readonly unknown[]>)
+      ? readOnChainPolicy(account, publicClient, PLUGIN_ADDRESS)
       : Promise.resolve(null),
   ]);
 
@@ -91,40 +86,17 @@ async function readAccountSession(
   let windowSpent = 0n;
 
   if (policy) {
-    const [
-      sessionKey,
-      ,
-      perTx,
-      winCap,
-      winSecs,
-      exp,
-      ,
-      winStart,
-      winSpent,
-      revoked,
-    ] = policy as unknown as [
-      Address,
-      Address,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      Address[],
-      bigint,
-      bigint,
-      boolean,
-    ];
-    perTxCapWei = perTx;
-    windowCapWei = winCap;
-    windowSecs = winSecs;
-    expiry = exp;
-    windowStart = winStart;
-    windowSpent = winSpent;
-    if (sessionKey.toLowerCase() === ZERO_ADDRESS) {
+    perTxCapWei = policy.perTxCapWei;
+    windowCapWei = policy.windowCapWei;
+    windowSecs = policy.windowSecs;
+    expiry = policy.expiry;
+    windowStart = policy.windowStart;
+    windowSpent = policy.windowSpent;
+    if (policy.sessionKey.toLowerCase() === ZERO_ADDRESS) {
       status = 'none';
-    } else if (revoked) {
+    } else if (policy.revoked) {
       status = 'revoked';
-    } else if (exp > 0n && exp <= BigInt(Math.floor(Date.now() / 1000))) {
+    } else if (expiry > 0n && expiry <= BigInt(Math.floor(Date.now() / 1000))) {
       status = 'expired';
     } else {
       status = 'active';

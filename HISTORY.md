@@ -356,3 +356,52 @@ independently via Arc RPC (`eth_getTransactionReceipt`).
 - `isValidSignature` unreachable via the account's 1271 entrypoint (see W2).
 - Sibling dashboards coordinator still owns /app UI; its string-ABI call sites
   need the `parsed*` switch (flagged, not fixed here).
+
+## 2026-10-15 — local mainnet lifecycle through the owner's wallet
+
+Account `0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f` (plugin already installed
+in Q2; a second install would collide, and its EntryPoint deposit is 0, so
+this pass is the owner-wallet path the UI actually offers). Session key
+`0x53f4780d6e2CD3450569571E13F33206370d206A` — address only; the private key
+stays outside the repo and was never typed into the page.
+
+### Fixes before the wallet would sign
+- `policies(address)` on solc 0.8.24 returns 9 scalars. The frontend ABI
+  included the dynamic arrays, so viem decoded `windowStart` as an offset and
+  threw `Position 1792018803 is out of bounds` on this account. Runtime reads
+  now use the 9-field getter plus storage for allowlist, tokens, and decimals
+  (`readOnChainPolicy`). Policy audit, the policies screen, and the dashboard
+  rollup all use it.
+- `/app/policy-audit` is wired. From Policies, "Policy audit" opens it.
+- Policies can rotate the session key by address. The form does not ask for
+  a private key.
+- A wallet refresh was setting the policies screen back to `loading`, which
+  unmounted the editor and restored the expired on-chain expiry, so Save
+  disabled itself before the wallet opened. A refresh that already has a
+  policy keeps the form mounted, and a typed session-key draft is not
+  overwritten by that refresh.
+- Session keys come from `GET /api/v1/accounts/:address/sessions`. That route
+  is RPC-backed, but the API defaulted to the H9 research plugin
+  `0x5780…441A3`, so a v0.2.0 account looked empty and Revoke never appeared.
+  The default is now production v0.2.0. Vite dev proxies `/api` to
+  `127.0.0.1:8787`.
+- `backend/reputation` pins `better-sqlite3` to `^11.10.0` so Node 20 (and
+  Render's Node 20) can load a prebuild. v13 needs Node ≥ 22 and has no
+  Windows prebuild.
+- Vitest loads env from `src/__tests__` (no `.env` files) so a developer's
+  gitignored `.env.local` cannot make `PLUGIN_ADDRESS` look hardcoded.
+  `npm test` is 76/76 with `.env.local` present. API tests 32/32 on Node 20.
+  Contracts were not changed; the earlier fork run remains 66/66.
+
+### Transactions (Arc mainnet, chain 5042)
+| Step | What | Tx | Result |
+|---|---|---|---|
+| Rotate | Owner wallet `0xf76e…71a3` saved a new policy in the Policies screen: session key above, expiry unix `1792162800` (2026-10-16 18:00 local), caps unchanged (0.01 / 0.05 per hour), allowlist unchanged | `0x30207ac3c363d22e7a718633c53bb8b0cf863cc442db963b4b6a48499c4cdd38` | status 1. `policies()` reads the new key and expiry |
+| In-cap | Session key called `account.execute(owner, 0.005 native, 0x)`. No spend button exists; this is the agent path | `0x2926fbb2a9c3981affa6287262828deca37dff9001baeb572b8b383dba4bf782` | status 1, block 26024885, gas 109,683. Account native 0.015 → 0.010. `windowSpent` 0 → 0.005. API then reported 0.005 of 0.05 used |
+| Over-cap | Same call for 0.05 native | `0x0f8f616f349d07bc09c2d335700b9446698fc2737aac9d4cb7ce5a790edc3064` | status 0, block 26024888, gas 53,074. `RuntimeValidationFailed(plugin, 1, PerTxCapExceeded(5e16, 1e16))`. Balance stayed 0.010 |
+| Revoke | Owner clicked Revoke on Session keys and confirmed in the wallet. `revokeSession` through the account fallback | `0x98d5f0d7c4b6afd1abeb2ce9644b4d044f4fa963af01e3551477a568284a6c1e` | status 1, block 26025609. `policies().revoked == true`. UI shows Revoked and disables the button: "Already revoked — there is nothing left to stop." |
+| After revoke | Session key tried `execute(owner, 0.001 native, 0x)` | `0xfdf2c5a670d9eedd05719d8c2a06669cc9da799b9fbb10a006576b99d578840f` | status 0, block 26025746. `RuntimeValidationFailed(plugin, 1, SessionRevoked())` (`0xec580bc7`). Balance stayed 0.010 |
+
+Spends are direct session-key calls, the same path as Q2. The userOp-through-EntryPoint proof remains W1 on a different account. This account was not reinstalled.
+
+Reown project id is in gitignored `frontend/.env.local` only. Wallet connected as the owner before the two owner transactions.

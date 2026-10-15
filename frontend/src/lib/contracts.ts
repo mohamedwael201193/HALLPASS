@@ -14,12 +14,14 @@ import {
   createPublicClient,
   decodeErrorResult,
   encodeAbiParameters,
+  getAddress,
   http,
   isAddress,
   keccak256,
   parseAbi,
   parseAbiParameters,
   toFunctionSelector,
+  toHex,
 } from 'viem';
 import { arc, ARC_CHAIN_ID } from './wagmi';
 
@@ -164,8 +166,12 @@ export const pluginAbi = [
   // --- installed execution functions (called via the account fallback) ---
   'function revokeSession()',
   'function updatePolicy(address sessionKey, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist, address[] tokens, uint8[] tokenDecimals)',
-  // --- policy read (v0.2.0: full 12-field Policy struct) ---
-  'function policies(address account) view returns (address sessionKey, address owner, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, address[] allowlist, uint256 windowStart, uint256 windowSpent, bool revoked, address[] tokens, uint8[] tokenDecimals)',
+  // --- policy read ---
+  // solc 0.8.24 omits dynamic arrays from the auto-generated public struct
+  // getter. The live return is these 9 scalars, in struct order, with
+  // allowlist / tokens / tokenDecimals left out. Those arrays are read from
+  // storage (mapping slot 0) by readOnChainPolicy — not from this getter.
+  'function policies(address account) view returns (address sessionKey, address owner, uint256 perTxCap, uint256 windowCap, uint256 windowSecs, uint256 expiry, uint256 windowStart, uint256 windowSpent, bool revoked)',
   // --- events (activity feed, bible §8.6) ---
   'event SessionRegistered(address indexed account, address indexed sessionKey, uint256 perTxCap, uint256 windowCap, uint256 expiry)',
   'event SpendAuthorized(address indexed account, address indexed sessionKey, address indexed to, uint256 amount, uint256 windowSpent)',
@@ -229,6 +235,137 @@ export const publicClient: PublicClient = createPublicClient({
   chain: arc,
   transport: http(RPC_URL),
 });
+
+/**
+ * Live policy for one account.
+ *
+ * `policies()` returns only the nine scalar fields (solc omits dynamic
+ * arrays). allowlist, tokens, and tokenDecimals are read from the Policy
+ * struct in storage. `policies` is the contract's first state variable
+ * (slot 0); the struct layout matches HallpassPlugin.sol.
+ */
+export interface OnChainPolicy {
+  sessionKey: Address;
+  owner: Address;
+  perTxCapWei: bigint;
+  windowCapWei: bigint;
+  windowSecs: bigint;
+  expiry: bigint;
+  windowStart: bigint;
+  windowSpent: bigint;
+  revoked: boolean;
+  allowlist: Address[];
+  tokens: Address[];
+  tokenDecimals: number[];
+}
+
+const POLICIES_MAPPING_SLOT = 0n;
+const ALLOWLIST_OFFSET = 6n;
+const TOKENS_OFFSET = 10n;
+const TOKEN_DECIMALS_OFFSET = 11n;
+const MAX_POLICY_ARRAY = 64;
+
+function mappingValueSlot(account: Address, slot: bigint): bigint {
+  return BigInt(
+    keccak256(
+      encodeAbiParameters(parseAbiParameters('address, uint256'), [account, slot]),
+    ),
+  );
+}
+
+function arrayDataSlot(lengthSlot: bigint): bigint {
+  return BigInt(
+    keccak256(encodeAbiParameters(parseAbiParameters('uint256'), [lengthSlot])),
+  );
+}
+
+async function readStorageWord(
+  client: PublicClient,
+  plugin: Address,
+  slot: bigint,
+): Promise<bigint> {
+  const word = await client.getStorageAt({ address: plugin, slot: toHex(slot) });
+  return BigInt(word ?? '0x0');
+}
+
+async function readStorageWords(
+  client: PublicClient,
+  plugin: Address,
+  lengthSlot: bigint,
+): Promise<bigint[]> {
+  const len = Number(await readStorageWord(client, plugin, lengthSlot));
+  if (len === 0) return [];
+  if (!Number.isSafeInteger(len) || len < 0 || len > MAX_POLICY_ARRAY) {
+    throw new Error(
+      `Policy array at storage slot ${lengthSlot} has length ${len}, which is not a plausible on-chain list.`,
+    );
+  }
+  const start = arrayDataSlot(lengthSlot);
+  const words: bigint[] = [];
+  for (let i = 0; i < len; i++) {
+    words.push(await readStorageWord(client, plugin, start + BigInt(i)));
+  }
+  return words;
+}
+
+function wordToAddress(word: bigint): Address {
+  return getAddress(`0x${word.toString(16).padStart(64, '0').slice(-40)}`);
+}
+
+export async function readOnChainPolicy(
+  account: Address,
+  client: PublicClient = publicClient,
+  plugin: Address | undefined = PLUGIN_ADDRESS,
+): Promise<OnChainPolicy> {
+  if (!plugin) {
+    throw new Error(
+      'VITE_PLUGIN_ADDRESS is not set, so there is no deployed plugin to read.',
+    );
+  }
+  const row = await client.readContract({
+    address: plugin,
+    abi: parsedPluginAbi,
+    functionName: 'policies',
+    args: [account],
+  });
+  const [
+    sessionKey,
+    owner,
+    perTxCap,
+    windowCap,
+    windowSecs,
+    expiry,
+    windowStart,
+    windowSpent,
+    revoked,
+  ] = row;
+  const base = mappingValueSlot(account, POLICIES_MAPPING_SLOT);
+  const allowlist = (await readStorageWords(client, plugin, base + ALLOWLIST_OFFSET)).map(
+    wordToAddress,
+  );
+  const tokens = (await readStorageWords(client, plugin, base + TOKENS_OFFSET)).map(
+    wordToAddress,
+  );
+  const tokenDecimals = (await readStorageWords(
+    client,
+    plugin,
+    base + TOKEN_DECIMALS_OFFSET,
+  )).map((word) => Number(word));
+  return {
+    sessionKey,
+    owner,
+    perTxCapWei: perTxCap,
+    windowCapWei: windowCap,
+    windowSecs,
+    expiry,
+    windowStart,
+    windowSpent,
+    revoked,
+    allowlist,
+    tokens,
+    tokenDecimals,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Manifest hash — computed from the DEPLOYED plugin, not from a local struct.

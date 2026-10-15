@@ -192,4 +192,18 @@ Quoted from the build bible's hard rules (non-negotiable):
 - Build bible: `~/workspace/your_files/hallpass-build-bible.md` (§§4, 6, 11, 12).
 - Reference implementations (research artifacts, not the shipped product): `~/workspace/beacon-build/progress/h9/work/HallpassPlugin.sol`, `~/workspace/beacon-build/progress/h9/foundry/src/HallpassMinimalPlugin.sol`.
 
-*Last updated: 2026-10-14. Rows 25–40 flip to PROVEN only when production tx hashes exist — this file is updated by recording hashes, never by editing statuses.*
+*Last updated: 2026-10-15. Rows 25–40 flip to PROVEN only when production tx hashes exist — this file is updated by recording hashes, never by editing statuses.*
+
+---
+
+## 3.6 Owner-wallet lifecycle on the Q2 account (2026-10-15)
+
+Same production plugin and the Q2 account `0xDE9Ea7D5F80F9d68B17672ECF96b82EF12A6c02f`. The plugin was already installed, so this pass rotates, spends, and revokes. The owner transactions were signed in the connected wallet from the local app. Spends are direct `execute` calls from session key `0x53f4780d6e2CD3450569571E13F33206370d206A` (there is no spend button). Not a new install, and not a userOp — W1 remains the userOp proof.
+
+| Step | Claim | Tx Hash | Status |
+|------|-------|---------|--------|
+| Rotate | Owner `updatePolicy` via the Policies screen. New session key, expiry `1792162800`, caps 0.01 / 0.05 | [0x30207ac3c363d22e7a718633c53bb8b0cf863cc442db963b4b6a48499c4cdd38](https://explorer.arc.io/tx/0x30207ac3c363d22e7a718633c53bb8b0cf863cc442db963b4b6a48499c4cdd38) | **PROVEN** (status 1) |
+| In-cap | Session `execute(owner, 0.005 native)` under the 0.01 cap. `windowSpent` became 0.005 | [0x2926fbb2a9c3981affa6287262828deca37dff9001baeb572b8b383dba4bf782](https://explorer.arc.io/tx/0x2926fbb2a9c3981affa6287262828deca37dff9001baeb572b8b383dba4bf782) | **PROVEN** (status 1, block 26024885) |
+| Over-cap | `execute(owner, 0.05 native)` reverts `PerTxCapExceeded(5e16, 1e16)` inside `RuntimeValidationFailed`. Balance unchanged | [0x0f8f616f349d07bc09c2d335700b9446698fc2737aac9d4cb7ce5a790edc3064](https://explorer.arc.io/tx/0x0f8f616f349d07bc09c2d335700b9446698fc2737aac9d4cb7ce5a790edc3064) | **PROVEN** (status 0, block 26024888) |
+| Revoke | Owner `revokeSession()` from the Session keys screen | [0x98d5f0d7c4b6afd1abeb2ce9644b4d044f4fa963af01e3551477a568284a6c1e](https://explorer.arc.io/tx/0x98d5f0d7c4b6afd1abeb2ce9644b4d044f4fa963af01e3551477a568284a6c1e) | **PROVEN** (status 1, block 26025609; `revoked == true`) |
+| After | Post-revoke `execute(owner, 0.001)` reverts `SessionRevoked()` (`0xec580bc7`). Balance unchanged | [0xfdf2c5a670d9eedd05719d8c2a06669cc9da799b9fbb10a006576b99d578840f](https://explorer.arc.io/tx/0xfdf2c5a670d9eedd05719d8c2a06669cc9da799b9fbb10a006576b99d578840f) | **PROVEN** (status 0, block 26025746) |

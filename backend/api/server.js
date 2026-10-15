@@ -48,9 +48,10 @@ try {
 
 const VERSION = '1.0.0';
 const DEFAULT_CHAIN_ID = 5042;
-// H9-proven minimal plugin deployment (Arc mainnet). Overridden by
-// PLUGIN_ADDRESS env for production deployments.
-const DEFAULT_PLUGIN_ADDRESS = '0x5780e3DEd211ee13494909432C89Be7b8D6441A3';
+// Production plugin v0.2.0 (Arc mainnet, Sourcify exact_match). Overridden by
+// PLUGIN_ADDRESS. The old H9 research plugin is not the default: matching
+// against it made live v0.2.0 sessions look empty.
+const DEFAULT_PLUGIN_ADDRESS = '0x5543fb530763ce21Eb827446b4913B8DB7f0D3d9';
 
 // ERC-6900 IPluginManager (bible §4.1; RPC-verified on Arc 5042: returns a
 // single address[] — e.g. getInstalledPlugins() on a live MSCA returns
